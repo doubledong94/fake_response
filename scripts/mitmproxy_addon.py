@@ -21,7 +21,7 @@ class MockAddon:
                     for api in data.get('apis', []):
                         if api.get('enabled', True):
                             parsed_url = urlparse(api['url'])
-                            key = f"{api['method']}:{parsed_url.path}"
+                            key = f"{api['method']}:{parsed_url.netloc}{parsed_url.path}"
                             self.apis[key] = api['response']
         except Exception as e:
             print(f"加载配置失败: {e}")
@@ -33,10 +33,11 @@ class MockAddon:
 
         method = flow.request.method
         parsed_url = urlparse(flow.request.url)
+        netloc = parsed_url.netloc
         path = parsed_url.path
 
         # 查找匹配的API配置
-        key = f"{method}:{path}"
+        key = f"{method}:{netloc}{path}"
         if key in self.apis:
             response_config = self.apis[key]
 
@@ -47,7 +48,7 @@ class MockAddon:
                 headers=response_config.get('headers', {"Content-Type": "application/json"})
             )
 
-            print(f"Mock响应: {method} {path} -> {response_config.get('status', 200)}")
+            print(f"Mock响应: {method} {netloc}{path} -> {response_config.get('status', 200)}")
 
 
 addons = [MockAddon()]
