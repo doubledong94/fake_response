@@ -2,6 +2,7 @@ import json
 import os
 from mitmproxy import http
 from typing import Dict, Any
+from urllib.parse import urlparse
 
 
 class MockAddon:
@@ -19,7 +20,8 @@ class MockAddon:
                     self.apis = {}
                     for api in data.get('apis', []):
                         if api.get('enabled', True):
-                            key = f"{api['method']}:{api['url']}"
+                            parsed_url = urlparse(api['url'])
+                            key = f"{api['method']}:{parsed_url.path}"
                             self.apis[key] = api['response']
         except Exception as e:
             print(f"加载配置失败: {e}")
@@ -30,7 +32,8 @@ class MockAddon:
         self.load_config()
 
         method = flow.request.method
-        path = flow.request.path
+        parsed_url = urlparse(flow.request.url)
+        path = parsed_url.path
 
         # 查找匹配的API配置
         key = f"{method}:{path}"
