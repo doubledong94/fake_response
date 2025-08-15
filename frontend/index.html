@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MitmProxy Manager</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="/static/css/style.css" rel="stylesheet">
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <i class="bi bi-shield-check"></i>
+                MitmProxy Manager
+            </a>
+            <div class="navbar-nav ms-auto">
+                <button class="btn btn-outline-light me-2" onclick="exportConfig()">
+                    <i class="bi bi-download"></i> 导出配置
+                </button>
+                <button class="btn btn-outline-light" onclick="document.getElementById('importFile').click()">
+                    <i class="bi bi-upload"></i> 导入配置
+                </button>
+                <input type="file" id="importFile" accept=".json" style="display: none;" onchange="importConfig(this)">
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-3">
+        <!-- 代理状态面板 -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-router"></i>
+                            代理服务状态
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-md-6">
+                                <div class="d-flex align-items-center">
+                                    <span class="status-indicator me-2" id="statusIndicator"></span>
+                                    <span id="statusText">检查中...</span>
+                                </div>
+                                <div id="proxyInfo" class="mt-2" style="display: none;">
+                                    <small class="text-muted">
+                                        代理地址: <span id="proxyAddress"></span>
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="col-md-6 text-end">
+                                <button class="btn btn-success me-2" id="startBtn" onclick="startProxy()">
+                                    <i class="bi bi-play-fill"></i> 启动代理
+                                </button>
+                                <button class="btn btn-danger" id="stopBtn" onclick="stopProxy()">
+                                    <i class="bi bi-stop-fill"></i> 停止代理
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- API管理区域 -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-list-ul"></i>
+                            API配置管理
+                        </h5>
+                        <div>
+                            <button class="btn btn-primary me-2" onclick="showAddApiModal()">
+                                <i class="bi bi-plus-lg"></i> 添加API
+                            </button>
+                            <button class="btn btn-outline-secondary me-2" onclick="batchEnable()">
+                                <i class="bi bi-check-all"></i> 批量启用
+                            </button>
+                            <button class="btn btn-outline-secondary" onclick="batchDisable()">
+                                <i class="bi bi-x-lg"></i> 批量禁用
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <!-- 搜索过滤 -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <input type="text" class="form-control" id="searchInput" placeholder="搜索API名称或URL..." onkeyup="filterAPIs()">
+                            </div>
+                            <div class="col-md-3">
+                                <select class="form-select" id="methodFilter" onchange="filterAPIs()">
+                                    <option value="">所有方法</option>
+                                    <option value="GET">GET</option>
+                                    <option value="POST">POST</option>
+                                    <option value="PUT">PUT</option>
+                                    <option value="DELETE">DELETE</option>
+                                    <option value="PATCH">PATCH</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <select class="form-select" id="statusFilter" onchange="filterAPIs()">
+                                    <option value="">所有状态</option>
+                                    <option value="enabled">已启用</option>
+                                    <option value="disabled">已禁用</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- API列表 -->
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th width="40">
+                                            <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+                                        </th>
+                                        <th>名称</th>
+                                        <th>方法</th>
+                                        <th>URL</th>
+                                        <th>状态</th>
+                                        <th>状态码</th>
+                                        <th width="200">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="apiTableBody">
+                                    <!-- API列表将通过JavaScript动态生成 -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- 空状态 -->
+                        <div id="emptyState" class="text-center py-5" style="display: none;">
+                            <i class="bi bi-inbox display-1 text-muted"></i>
+                            <h5 class="text-muted mt-3">暂无API配置</h5>
+                            <p class="text-muted">点击"添加API"按钮创建第一个API配置</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加/编辑API模态框 -->
+    <div class="modal fade" id="apiModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="apiModalTitle">添加API</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="apiForm">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="apiName" class="form-label">API名称 *</label>
+                                    <input type="text" class="form-control" id="apiName" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="apiMethod" class="form-label">HTTP方法 *</label>
+                                    <select class="form-select" id="apiMethod" required>
+                                        <option value="GET">GET</option>
+                                        <option value="POST">POST</option>
+                                        <option value="PUT">PUT</option>
+                                        <option value="DELETE">DELETE</option>
+                                        <option value="PATCH">PATCH</option>
+                                        <option value="HEAD">HEAD</option>
+                                        <option value="OPTIONS">OPTIONS</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="apiUrl" class="form-label">API URL *</label>
+                            <input type="text" class="form-control" id="apiUrl" placeholder="/api/example" required>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="responseStatus" class="form-label">响应状态码</label>
+                                    <input type="number" class="form-control" id="responseStatus" value="200" min="100" max="599">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="contentType" class="form-label">Content-Type</label>
+                                    <select class="form-select" id="contentType">
+                                        <option value="application/json">application/json</option>
+                                        <option value="text/plain">text/plain</option>
+                                        <option value="text/html">text/html</option>
+                                        <option value="application/xml">application/xml</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="responseHeaders" class="form-label">响应头 (JSON格式)</label>
+                            <textarea class="form-control" id="responseHeaders" rows="3" placeholder='{"Content-Type": "application/json"}'></textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="responseBody" class="form-label">响应体 (JSON格式)</label>
+                            <textarea class="form-control" id="responseBody" rows="8" placeholder='{"errno": 0, "error": "", "data": {}}'></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="saveAPI()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast通知 -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="toast" class="toast" role="alert">
+            <div class="toast-header">
+                <i class="bi bi-info-circle me-2"></i>
+                <strong class="me-auto">通知</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body" id="toastBody">
+                <!-- 通知内容 -->
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
