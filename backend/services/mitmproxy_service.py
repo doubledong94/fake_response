@@ -31,26 +31,8 @@ class MitmProxyService:
         # 方法1: 检查subprocess对象
         if self.process and self.process.poll() is None:
             return True
-        
-        # 方法2: 检查PID文件
-        if os.path.exists(self.pid_file):
-            try:
-                with open(self.pid_file, 'r') as f:
-                    pid = int(f.read().strip())
-                # 使用psutil检查进程是否存在
-                if psutil.pid_exists(pid):
-                    proc = psutil.Process(pid)
-                    if proc.is_running() and 'mitmdump' in proc.name():
-                        # 重新建立process对象引用
-                        if not self.process or self.process.poll() is not None:
-                            self._reconnect_to_process(pid)
-                        return True
-                # PID文件存在但进程不存在，清理PID文件
-                os.remove(self.pid_file)
-            except (ValueError, psutil.NoSuchProcess, FileNotFoundError):
-                pass
-        
-        # 方法3: 通过端口检查
+
+        # 方法2: 通过端口检查
         return self._check_port_in_use()
     
     def _reconnect_to_process(self, pid: int):
@@ -148,9 +130,6 @@ class MitmProxyService:
                 return True
             else:
                 self.process = None
-                # 清理PID文件
-                if os.path.exists(self.pid_file):
-                    os.remove(self.pid_file)
                 return False
 
         except Exception as e:
@@ -188,8 +167,6 @@ class MitmProxyService:
                 
                 # 清理资源
                 self.process = None
-                if os.path.exists(self.pid_file):
-                    os.remove(self.pid_file)
                 return True
                 
             except psutil.TimeoutExpired:
@@ -207,7 +184,4 @@ class MitmProxyService:
 
         # 清理资源
         self.process = None
-        if os.path.exists(self.pid_file):
-            os.remove(self.pid_file)
-        
         return True
