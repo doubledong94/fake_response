@@ -58,14 +58,34 @@ class MitmProxyService:
                 "mitmdump",
                 "-p", str(self.port),
                 "-s", addon_path,
-                "--set", "confdir=./data"
+                "--set", "confdir=./data",
+                "--set", "flow_detail=4",
+                "--set", "console_default_contentview=raw",
+                "--set", "console_eventlog_verbosity=info",
+                "--set", "dumper_default_contentview=raw"
             ]
 
-            # 启动进程
+            # 设置环境变量解决中文编码问题
+            env = os.environ.copy()
+            env['PYTHONIOENCODING'] = 'utf-8'
+            env['PYTHONUNBUFFERED'] = '1'
+            
+            # 根据系统设置合适的locale
+            import platform
+            if platform.system() == 'Darwin':  # macOS
+                env['LC_ALL'] = 'en_US.UTF-8'
+                env['LANG'] = 'en_US.UTF-8'
+            else:  # Linux
+                env['LC_ALL'] = 'C.UTF-8'
+                env['LANG'] = 'C.UTF-8'
+
+            # 启动进程，输出到日志文件
+            log_file = open("./data/mitmdump.log", "a", encoding="utf-8")
             self.process = subprocess.Popen(
                 cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                env=env,
                 preexec_fn=os.setsid if os.name != 'nt' else None
             )
 
