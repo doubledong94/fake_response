@@ -12,6 +12,7 @@ class MitmProxyService:
     def __init__(self):
         self.process: Optional[subprocess.Popen] = None
         self.port = 8080
+        self.pid_file = "./data/mitmdump.pid"
 
     def get_local_ip(self) -> str:
         """获取本地IP地址"""
@@ -27,23 +28,70 @@ class MitmProxyService:
 
     def is_running(self) -> bool:
         """检查mitmproxy是否正在运行"""
-        if self.process is None:
-            return False
-
+        # 方法1: 检查subprocess对象
+        if self.process and self.process.poll() is None:
+            return True
+        
+        # 方法2: 检查PID文件
+        if os.path.exists(self.pid_file):
+            try:
+                with open(self.pid_file, 'r') as f:
+                    pid = int(f.read().strip())
+                # 使用psutil检查进程是否存在
+                if psutil.pid_exists(pid):
+                    proc = psutil.Process(pid)
+                    if proc.is_running() and 'mitmdump' in proc.name():
+                        # 重新建立process对象引用
+                        if not self.process or self.process.poll() is not None:
+                            self._reconnect_to_process(pid)
+                        return True
+                # PID文件存在但进程不存在，清理PID文件
+                os.remove(self.pid_file)
+            except (ValueError, psutil.NoSuchProcess, FileNotFoundError):
+                pass
+        
+        # 方法3: 通过端口检查
+        return self._check_port_in_use()
+    
+    def _reconnect_to_process(self, pid: int):
+        """重新建立到现有进程的连接"""
         try:
-            # 检查进程是否还存在
-            return self.process.poll() is None
+            # 注意：这里不能直接从PID创建Popen对象
+            # 但可以用于后续的停止操作
+            self.process = None  # 暂时设为None，通过PID文件管理
+        except Exception:
+            pass
+    
+    def _check_port_in_use(self) -> bool:
+        """检查端口是否被占用"""
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                result = s.connect_ex(('127.0.0.1', self.port))
+                return result == 0
         except Exception:
             return False
 
     def get_status(self) -> ProxyStatus:
         """获取代理状态"""
         running = self.is_running()
+        
+        # 获取PID
+        pid = None
+        if running:
+            if self.process:
+                pid = self.process.pid
+            elif os.path.exists(self.pid_file):
+                try:
+                    with open(self.pid_file, 'r') as f:
+                        pid = int(f.read().strip())
+                except (ValueError, FileNotFoundError):
+                    pass
+        
         return ProxyStatus(
             running=running,
             ip=self.get_local_ip() if running else None,
             port=self.port,
-            pid=self.process.pid if running and self.process else None
+            pid=pid
         )
 
     def start(self) -> bool:
@@ -89,6 +137,10 @@ class MitmProxyService:
                 preexec_fn=os.setsid if os.name != 'nt' else None
             )
 
+            # 保存PID到文件
+            with open(self.pid_file, 'w') as f:
+                f.write(str(self.process.pid))
+
             # 等待一小段时间确保启动成功
             time.sleep(2)
 
@@ -96,6 +148,9 @@ class MitmProxyService:
                 return True
             else:
                 self.process = None
+                # 清理PID文件
+                if os.path.exists(self.pid_file):
+                    os.remove(self.pid_file)
                 return False
 
         except Exception as e:
@@ -108,29 +163,51 @@ class MitmProxyService:
         if not self.is_running():
             return True
 
-        try:
-            if self.process:
-                if os.name == 'nt':  # Windows
-                    self.process.terminate()
-                else:  # Unix/Linux
-                    os.killpg(os.getpgid(self.process.pid), signal.SIGTERM)
-
-                # 等待进程结束
-                self.process.wait(timeout=10)
-                self.process = None
-                return True
-        except Exception as e:
-            print(f"停止mitmproxy失败: {e}")
-            # 强制杀死进程
+        pid = None
+        
+        # 尝试从PID文件获取进程ID
+        if os.path.exists(self.pid_file):
             try:
-                if self.process:
-                    if os.name == 'nt':
-                        self.process.kill()
-                    else:
-                        os.killpg(os.getpgid(self.process.pid), signal.SIGKILL)
-                    self.process = None
-                return True
-            except Exception:
-                return False
+                with open(self.pid_file, 'r') as f:
+                    pid = int(f.read().strip())
+            except (ValueError, FileNotFoundError):
+                pid = None
 
-        return False
+        # 如果没有PID文件但有process对象，使用process.pid
+        if not pid and self.process:
+            pid = self.process.pid
+
+        if pid:
+            try:
+                # 使用psutil停止进程
+                proc = psutil.Process(pid)
+                if proc.is_running():
+                    proc.terminate()
+                    # 等待进程结束
+                    proc.wait(timeout=10)
+                
+                # 清理资源
+                self.process = None
+                if os.path.exists(self.pid_file):
+                    os.remove(self.pid_file)
+                return True
+                
+            except psutil.TimeoutExpired:
+                # 超时后强制杀死
+                try:
+                    proc.kill()
+                    proc.wait(timeout=5)
+                except:
+                    pass
+            except psutil.NoSuchProcess:
+                # 进程已经不存在
+                pass
+            except Exception as e:
+                print(f"停止mitmproxy失败: {e}")
+
+        # 清理资源
+        self.process = None
+        if os.path.exists(self.pid_file):
+            os.remove(self.pid_file)
+        
+        return True
