@@ -6,7 +6,8 @@ import os
 
 from models import (
     APIConfig, APICreateRequest, APIUpdateRequest,
-    ProxyStatus, HTTPMethod
+    ProxyStatus, HTTPMethod, FileDownloadConfig, 
+    FileDownloadCreateRequest, FileDownloadUpdateRequest
 )
 from services.mitmproxy_service import MitmProxyService
 from services.config_service import ConfigService
@@ -168,3 +169,75 @@ async def import_config(file: UploadFile = File(...)):
 async def get_http_methods():
     """获取支持的HTTP方法列表"""
     return [method.value for method in HTTPMethod]
+
+
+# 文件下载管理相关API
+@router.get("/file-downloads", response_model=List[FileDownloadConfig])
+async def get_all_file_downloads():
+    """获取所有文件下载配置"""
+    return config_service.get_all_file_downloads()
+
+
+@router.get("/file-downloads/{download_id}", response_model=FileDownloadConfig)
+async def get_file_download(download_id: str):
+    """获取指定文件下载配置"""
+    download = config_service.get_file_download_by_id(download_id)
+    if not download:
+        raise HTTPException(status_code=404, detail="文件下载配置不存在")
+    return download
+
+
+@router.post("/file-downloads", response_model=FileDownloadConfig)
+async def create_file_download(download_request: FileDownloadCreateRequest):
+    """创建新的文件下载配置"""
+    download = FileDownloadConfig(
+        name=download_request.name,
+        url_pattern=download_request.url_pattern,
+        local_file_path=download_request.local_file_path,
+        content_type=download_request.content_type
+    )
+
+    success = config_service.add_file_download(download)
+    if success:
+        return download
+    else:
+        raise HTTPException(status_code=500, detail="创建文件下载配置失败")
+
+
+@router.put("/file-downloads/{download_id}", response_model=FileDownloadConfig)
+async def update_file_download(download_id: str, download_request: FileDownloadUpdateRequest):
+    """更新文件下载配置"""
+    existing_download = config_service.get_file_download_by_id(download_id)
+    if not existing_download:
+        raise HTTPException(status_code=404, detail="文件下载配置不存在")
+
+    # 更新字段
+    update_data = download_request.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(existing_download, field, value)
+
+    success = config_service.update_file_download(download_id, existing_download)
+    if success:
+        return existing_download
+    else:
+        raise HTTPException(status_code=500, detail="更新文件下载配置失败")
+
+
+@router.delete("/file-downloads/{download_id}")
+async def delete_file_download(download_id: str):
+    """删除文件下载配置"""
+    success = config_service.delete_file_download(download_id)
+    if success:
+        return {"message": "文件下载配置删除成功", "success": True}
+    else:
+        raise HTTPException(status_code=404, detail="文件下载配置不存在")
+
+
+@router.post("/file-downloads/{download_id}/toggle")
+async def toggle_file_download_status(download_id: str):
+    """切换文件下载启用状态"""
+    success = config_service.toggle_file_download_status(download_id)
+    if success:
+        return {"message": "文件下载状态切换成功", "success": True}
+    else:
+        raise HTTPException(status_code=404, detail="文件下载配置不存在")

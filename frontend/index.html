@@ -66,15 +66,38 @@
             </div>
         </div>
 
-        <!-- API管理区域 -->
-        <div class="row">
+        <!-- 标签页导航 -->
+        <div class="row mb-3">
             <div class="col-12">
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="card-title mb-0">
-                            <i class="bi bi-list-ul"></i>
-                            API配置管理
-                        </h5>
+                <ul class="nav nav-tabs" id="mainTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="api-tab" data-bs-toggle="tab" data-bs-target="#api-pane" type="button" role="tab">
+                            <i class="bi bi-list-ul"></i> API配置管理
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="download-tab" data-bs-toggle="tab" data-bs-target="#download-pane" type="button" role="tab">
+                            <i class="bi bi-download"></i> 文件下载拦截
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 标签页内容 -->
+        <div class="tab-content" id="mainTabContent">
+            <!-- API管理标签页 -->
+            <div class="tab-pane fade show active" id="api-pane" role="tabpanel">
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="card-title mb-0">
+                                    <i class="bi bi-list-ul"></i>
+                                    API配置管理
+                                </h5>
+                            </div>
+                        </div>
                         <div>
                             <button class="btn btn-primary me-2" onclick="showAddApiModal()">
                                 <i class="bi bi-plus-lg"></i> 添加API
@@ -139,6 +162,68 @@
                             <i class="bi bi-inbox display-1 text-muted"></i>
                             <h5 class="text-muted mt-3">暂无API配置</h5>
                             <p class="text-muted">点击"添加API"按钮创建第一个API配置</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 文件下载拦截标签页 -->
+            <div class="tab-pane fade" id="download-pane" role="tabpanel">
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="card-title mb-0">
+                                    <i class="bi bi-download"></i>
+                                    文件下载拦截配置
+                                </h5>
+                                <div>
+                                    <button class="btn btn-primary me-2" onclick="showAddDownloadModal()">
+                                        <i class="bi bi-plus-lg"></i> 添加拦截规则
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <!-- 搜索过滤 -->
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <input type="text" class="form-control" id="downloadSearchInput" placeholder="搜索规则名称或URL模式..." onkeyup="filterDownloads()">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <select class="form-select" id="downloadStatusFilter" onchange="filterDownloads()">
+                                            <option value="">所有状态</option>
+                                            <option value="enabled">已启用</option>
+                                            <option value="disabled">已禁用</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- 文件下载拦截列表 -->
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>名称</th>
+                                                <th>URL模式</th>
+                                                <th>本地文件路径</th>
+                                                <th>内容类型</th>
+                                                <th>状态</th>
+                                                <th width="150">操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="downloadTableBody">
+                                            <!-- 文件下载列表将通过JavaScript动态生成 -->
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <!-- 空状态 -->
+                                <div id="downloadEmptyState" class="text-center py-5" style="display: none;">
+                                    <i class="bi bi-folder-x display-1 text-muted"></i>
+                                    <h5 class="text-muted mt-3">暂无文件下载拦截配置</h5>
+                                    <p class="text-muted">点击"添加拦截规则"按钮创建第一个下载拦截配置</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -218,6 +303,87 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
                     <button type="button" class="btn btn-primary" onclick="saveAPI()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加/编辑文件下载拦截模态框 -->
+    <div class="modal fade" id="downloadModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="downloadModalTitle">添加文件下载拦截</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="downloadForm">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="downloadName" class="form-label">规则名称 *</label>
+                                    <input type="text" class="form-control" id="downloadName" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="downloadContentType" class="form-label">内容类型</label>
+                                    <select class="form-select" id="downloadContentType">
+                                        <option value="">自动检测</option>
+                                        <option value="application/pdf">PDF文档</option>
+                                        <option value="text/plain">纯文本</option>
+                                        <option value="application/json">JSON文件</option>
+                                        <option value="application/zip">ZIP压缩包</option>
+                                        <option value="image/jpeg">JPEG图片</option>
+                                        <option value="image/png">PNG图片</option>
+                                        <option value="application/octet-stream">二进制文件</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="downloadUrlPattern" class="form-label">URL匹配模式 *</label>
+                            <input type="text" class="form-control" id="downloadUrlPattern" placeholder="例如: .*\.pdf$ 或 https://example.com/files/.*" required>
+                            <div class="form-text">支持正则表达式。例如：<code>.*\.pdf$</code> 匹配所有PDF文件</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="downloadFilePath" class="form-label">本地文件路径 *</label>
+                            <input type="text" class="form-control" id="downloadFilePath" placeholder="/path/to/local/file.pdf" required>
+                            <div class="form-text">请提供服务器上本地文件的完整路径</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">常用匹配模式示例</h6>
+                                </div>
+                                <div class="card-body">
+                                    <small class="text-muted">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <strong>文件扩展名匹配：</strong><br>
+                                                <code>.*\.pdf$</code> - 所有PDF文件<br>
+                                                <code>.*\.txt$</code> - 所有文本文件<br>
+                                                <code>.*\.(jpg|png|gif)$</code> - 图片文件<br>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <strong>URL路径匹配：</strong><br>
+                                                <code>/download/.*</code> - /download/路径下的文件<br>
+                                                <code>files\.example\.com/.*</code> - 特定域名<br>
+                                                <code>.*filename\.pdf$</code> - 特定文件名<br>
+                                            </div>
+                                        </div>
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="saveDownload()">保存</button>
                 </div>
             </div>
         </div>

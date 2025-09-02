@@ -17,6 +17,14 @@ class ResponseData(BaseModel):
     headers: Dict[str, str] = Field(default_factory=lambda: {"Content-Type": "application/json"})
     body: Any = Field(default_factory=dict)
 
+class FileDownloadConfig(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = Field(..., min_length=1, max_length=100)
+    url_pattern: str = Field(..., min_length=1)
+    local_file_path: str = Field(..., min_length=1)
+    content_type: Optional[str] = None
+    enabled: bool = True
+
 class APIConfig(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str = Field(..., min_length=1, max_length=100)
@@ -46,3 +54,16 @@ class APIUpdateRequest(BaseModel):
     method: Optional[HTTPMethod] = None
     enabled: Optional[bool] = None
     response: Optional[ResponseData] = None
+
+class FileDownloadCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    url_pattern: str = Field(..., min_length=1)
+    local_file_path: str = Field(..., min_length=1)
+    content_type: Optional[str] = None
+
+class FileDownloadUpdateRequest(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    url_pattern: Optional[str] = Field(None, min_length=1)
+    local_file_path: Optional[str] = Field(None, min_length=1)
+    content_type: Optional[str] = None
+    enabled: Optional[bool] = None

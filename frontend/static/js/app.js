@@ -1,6 +1,8 @@
 // 全局变量
 let apis = [];
+let downloads = [];
 let currentEditingId = null;
+let currentEditingDownloadId = null;
 let selectedApiIds = new Set();
 
 // 页面加载完成后初始化
@@ -12,9 +14,15 @@ document.addEventListener('DOMContentLoaded', function() {
 async function initializeApp() {
     await checkProxyStatus();
     await loadAPIs();
+    await loadDownloads();
 
     // 定期检查代理状态
     setInterval(checkProxyStatus, 5000);
+
+    // 标签页切换事件监听
+    document.getElementById('download-tab').addEventListener('shown.bs.tab', function() {
+        loadDownloads();
+    });
 }
 
 // 检查代理状态
@@ -572,3 +580,227 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// =============================================================================
+// 文件下载拦截管理相关函数
+// =============================================================================
+
+// 加载文件下载拦截列表
+async function loadDownloads() {
+    try {
+        const response = await fetch('/api/file-downloads');
+        downloads = await response.json();
+        renderDownloadTable();
+    } catch (error) {
+        console.error('加载文件下载列表失败:', error);
+        showToast('加载文件下载列表失败', 'error');
+    }
+}
+
+// 渲染文件下载表格
+function renderDownloadTable() {
+    const tbody = document.getElementById('downloadTableBody');
+    const emptyState = document.getElementById('downloadEmptyState');
+
+    if (downloads.length === 0) {
+        tbody.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
+    }
+
+    emptyState.style.display = 'none';
+
+    tbody.innerHTML = downloads.map(download => `
+        <tr class="download-row ${!download.enabled ? 'disabled' : ''}" data-id="${download.id}">
+            <td>
+                <div class="text-truncate" title="${download.name}">${download.name}</div>
+            </td>
+            <td>
+                <code class="text-truncate" title="${download.url_pattern}">${download.url_pattern}</code>
+            </td>
+            <td>
+                <small class="text-truncate" title="${download.local_file_path}">${download.local_file_path}</small>
+            </td>
+            <td>
+                <span class="badge bg-secondary">${download.content_type || '自动检测'}</span>
+            </td>
+            <td>
+                <span class="badge ${download.enabled ? 'bg-success' : 'bg-secondary'}">
+                    ${download.enabled ? '启用' : '禁用'}
+                </span>
+            </td>
+            <td>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-primary" onclick="editDownload('${download.id}')" title="编辑">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-outline-${download.enabled ? 'warning' : 'success'}"
+                            onclick="toggleDownload('${download.id}')" title="${download.enabled ? '禁用' : '启用'}">
+                        <i class="bi bi-${download.enabled ? 'pause' : 'play'}"></i>
+                    </button>
+                    <button class="btn btn-outline-danger" onclick="deleteDownload('${download.id}')" title="删除">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// 显示添加文件下载拦截模态框
+function showAddDownloadModal() {
+    currentEditingDownloadId = null;
+    document.getElementById('downloadModalTitle').textContent = '添加文件下载拦截';
+    document.getElementById('downloadForm').reset();
+
+    new bootstrap.Modal(document.getElementById('downloadModal')).show();
+}
+
+// 编辑文件下载拦截
+function editDownload(downloadId) {
+    const download = downloads.find(d => d.id === downloadId);
+    if (!download) return;
+
+    currentEditingDownloadId = downloadId;
+    document.getElementById('downloadModalTitle').textContent = '编辑文件下载拦截';
+
+    // 填充表单
+    document.getElementById('downloadName').value = download.name;
+    document.getElementById('downloadUrlPattern').value = download.url_pattern;
+    document.getElementById('downloadFilePath').value = download.local_file_path;
+    document.getElementById('downloadContentType').value = download.content_type || '';
+
+    new bootstrap.Modal(document.getElementById('downloadModal')).show();
+}
+
+// 保存文件下载拦截
+async function saveDownload() {
+    const form = document.getElementById('downloadForm');
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+
+    try {
+        // 获取表单数据
+        const name = document.getElementById('downloadName').value.trim();
+        const urlPattern = document.getElementById('downloadUrlPattern').value.trim();
+        const filePath = document.getElementById('downloadFilePath').value.trim();
+        const contentType = document.getElementById('downloadContentType').value || null;
+
+        const downloadData = {
+            name,
+            url_pattern: urlPattern,
+            local_file_path: filePath,
+            content_type: contentType
+        };
+
+        let response;
+        if (currentEditingDownloadId) {
+            // 更新下载拦截
+            response = await fetch(`/api/file-downloads/${currentEditingDownloadId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(downloadData)
+            });
+        } else {
+            // 创建下载拦截
+            response = await fetch('/api/file-downloads', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(downloadData)
+            });
+        }
+
+        if (response.ok) {
+            showToast(currentEditingDownloadId ? '文件下载拦截更新成功' : '文件下载拦截创建成功', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('downloadModal')).hide();
+            await loadDownloads();
+        } else {
+            const error = await response.json();
+            throw new Error(error.detail || '保存失败');
+        }
+    } catch (error) {
+        console.error('保存文件下载拦截失败:', error);
+        showToast('保存文件下载拦截失败: ' + error.message, 'error');
+    }
+}
+
+// 切换文件下载拦截状态
+async function toggleDownload(downloadId) {
+    try {
+        const response = await fetch(`/api/file-downloads/${downloadId}/toggle`, { method: 'POST' });
+
+        if (response.ok) {
+            const download = downloads.find(d => d.id === downloadId);
+            const newStatus = download ? !download.enabled : true;
+            showToast(`文件下载拦截已${newStatus ? '启用' : '禁用'}`, 'success');
+            await loadDownloads();
+        } else {
+            const error = await response.json();
+            throw new Error(error.detail || '操作失败');
+        }
+    } catch (error) {
+        console.error('切换文件下载拦截状态失败:', error);
+        showToast('操作失败: ' + error.message, 'error');
+    }
+}
+
+// 删除文件下载拦截
+async function deleteDownload(downloadId) {
+    const download = downloads.find(d => d.id === downloadId);
+    if (!download) return;
+
+    if (!confirm(`确定要删除文件下载拦截 "${download.name}" 吗？`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/file-downloads/${downloadId}`, { method: 'DELETE' });
+
+        if (response.ok) {
+            showToast('文件下载拦截删除成功', 'success');
+            await loadDownloads();
+        } else {
+            const error = await response.json();
+            throw new Error(error.detail || '删除失败');
+        }
+    } catch (error) {
+        console.error('删除文件下载拦截失败:', error);
+        showToast('删除文件下载拦截失败: ' + error.message, 'error');
+    }
+}
+
+// 过滤文件下载拦截
+function filterDownloads() {
+    const searchTerm = document.getElementById('downloadSearchInput').value.toLowerCase();
+    const statusFilter = document.getElementById('downloadStatusFilter').value;
+
+    const rows = document.querySelectorAll('.download-row');
+
+    rows.forEach(row => {
+        const downloadId = row.dataset.id;
+        const download = downloads.find(d => d.id === downloadId);
+
+        if (!download) {
+            row.style.display = 'none';
+            return;
+        }
+
+        let show = true;
+
+        // 搜索过滤
+        if (searchTerm) {
+            const searchText = `${download.name} ${download.url_pattern}`.toLowerCase();
+            show = show && searchText.includes(searchTerm);
+        }
+
+        // 状态过滤
+        if (statusFilter) {
+            const isEnabled = statusFilter === 'enabled';
+            show = show && download.enabled === isEnabled;
+        }
+
+        row.style.display = show ? '' : 'none';
+    });
+}
