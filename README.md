@@ -16,14 +16,7 @@ pip install mitmproxy
 
 ## 启动后端服务
 
-cd backend
-
-export PYTHONPATH=$(pwd)
-
-cd ..
-
-uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
-
+./start_server.sh
 
 # 3. 访问应用
 打开浏览器访问 http://localhost:8000
