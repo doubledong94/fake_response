@@ -1,7 +1,7 @@
 # 1. 安装依赖
 
 ## 创建虚拟环境
-python -m venv venv
+python3.12 -m venv venv
 
 source venv/bin/activate  # Windows: venv\Scripts\activate
 
