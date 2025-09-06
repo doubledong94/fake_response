@@ -67,3 +67,27 @@ class FileDownloadUpdateRequest(BaseModel):
     local_file_path: Optional[str] = Field(None, min_length=1)
     content_type: Optional[str] = None
     enabled: Optional[bool] = None
+
+class RequestMappingConfig(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = Field(..., min_length=1, max_length=100)
+    url_pattern: str = Field(..., min_length=1)
+    target_host: str = Field(default="localhost")
+    target_port: int = Field(..., ge=1, le=65535)
+    methods: List[HTTPMethod] = Field(default_factory=lambda: [HTTPMethod.GET, HTTPMethod.POST])
+    enabled: bool = True
+
+class RequestMappingCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    url_pattern: str = Field(..., min_length=1)
+    target_host: str = Field(default="localhost")
+    target_port: int = Field(..., ge=1, le=65535)
+    methods: List[HTTPMethod] = Field(default_factory=lambda: [HTTPMethod.GET, HTTPMethod.POST])
+
+class RequestMappingUpdateRequest(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    url_pattern: Optional[str] = Field(None, min_length=1)
+    target_host: Optional[str] = None
+    target_port: Optional[int] = Field(None, ge=1, le=65535)
+    methods: Optional[List[HTTPMethod]] = None
+    enabled: Optional[bool] = None

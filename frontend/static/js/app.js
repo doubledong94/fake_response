@@ -1,8 +1,10 @@
 // 全局变量
 let apis = [];
 let downloads = [];
+let mappings = [];
 let currentEditingId = null;
 let currentEditingDownloadId = null;
+let currentEditingMappingId = null;
 let selectedApiIds = new Set();
 
 // 页面加载完成后初始化
@@ -15,6 +17,7 @@ async function initializeApp() {
     await checkProxyStatus();
     await loadAPIs();
     await loadDownloads();
+    await loadMappings();
 
     // 定期检查代理状态
     setInterval(checkProxyStatus, 5000);
@@ -22,6 +25,10 @@ async function initializeApp() {
     // 标签页切换事件监听
     document.getElementById('download-tab').addEventListener('shown.bs.tab', function() {
         loadDownloads();
+    });
+    
+    document.getElementById('mapping-tab').addEventListener('shown.bs.tab', function() {
+        loadMappings();
     });
 }
 
@@ -799,6 +806,262 @@ function filterDownloads() {
         if (statusFilter) {
             const isEnabled = statusFilter === 'enabled';
             show = show && download.enabled === isEnabled;
+        }
+
+        row.style.display = show ? '' : 'none';
+    });
+}
+
+// =============================================================================
+// 请求映射管理相关函数
+// =============================================================================
+
+// 加载请求映射列表
+async function loadMappings() {
+    try {
+        const response = await fetch('/api/request-mappings');
+        mappings = await response.json();
+        renderMappingTable();
+    } catch (error) {
+        console.error('加载请求映射列表失败:', error);
+        showToast('加载请求映射列表失败', 'error');
+    }
+}
+
+// 渲染请求映射表格
+function renderMappingTable() {
+    const tbody = document.getElementById('mappingTableBody');
+    const emptyState = document.getElementById('mappingEmptyState');
+
+    if (mappings.length === 0) {
+        tbody.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
+    }
+
+    emptyState.style.display = 'none';
+
+    tbody.innerHTML = mappings.map(mapping => `
+        <tr class="mapping-row ${!mapping.enabled ? 'disabled' : ''}" data-id="${mapping.id}">
+            <td>
+                <div class="text-truncate" title="${mapping.name}">${mapping.name}</div>
+            </td>
+            <td>
+                <code class="text-truncate" title="${mapping.url_pattern}">${mapping.url_pattern}</code>
+            </td>
+            <td>
+                <span class="badge bg-info">${mapping.target_host}:${mapping.target_port}</span>
+            </td>
+            <td>
+                <div class="d-flex gap-1 flex-wrap">
+                    ${mapping.methods.map(method => `<span class="badge bg-secondary">${method}</span>`).join('')}
+                </div>
+            </td>
+            <td>
+                <span class="badge ${mapping.enabled ? 'bg-success' : 'bg-secondary'}">
+                    ${mapping.enabled ? '启用' : '禁用'}
+                </span>
+            </td>
+            <td>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-primary" onclick="editMapping('${mapping.id}')" title="编辑">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-outline-${mapping.enabled ? 'warning' : 'success'}"
+                            onclick="toggleMapping('${mapping.id}')" title="${mapping.enabled ? '禁用' : '启用'}">
+                        <i class="bi bi-${mapping.enabled ? 'pause' : 'play'}"></i>
+                    </button>
+                    <button class="btn btn-outline-danger" onclick="deleteMapping('${mapping.id}')" title="删除">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// 显示添加请求映射模态框
+function showAddMappingModal() {
+    currentEditingMappingId = null;
+    document.getElementById('mappingModalTitle').textContent = '添加请求映射';
+    document.getElementById('mappingForm').reset();
+    
+    // 设置默认值
+    document.getElementById('mappingTargetHost').value = 'localhost';
+    document.getElementById('methodGET').checked = true;
+    document.getElementById('methodPOST').checked = true;
+
+    new bootstrap.Modal(document.getElementById('mappingModal')).show();
+}
+
+// 编辑请求映射
+function editMapping(mappingId) {
+    const mapping = mappings.find(m => m.id === mappingId);
+    if (!mapping) return;
+
+    currentEditingMappingId = mappingId;
+    document.getElementById('mappingModalTitle').textContent = '编辑请求映射';
+
+    // 填充表单
+    document.getElementById('mappingName').value = mapping.name;
+    document.getElementById('mappingUrlPattern').value = mapping.url_pattern;
+    document.getElementById('mappingTargetHost').value = mapping.target_host;
+    document.getElementById('mappingTargetPort').value = mapping.target_port;
+
+    // 设置HTTP方法复选框
+    const methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
+    methods.forEach(method => {
+        const checkbox = document.getElementById('method' + method);
+        if (checkbox) {
+            checkbox.checked = mapping.methods.includes(method);
+        }
+    });
+
+    new bootstrap.Modal(document.getElementById('mappingModal')).show();
+}
+
+// 保存请求映射
+async function saveMapping() {
+    const form = document.getElementById('mappingForm');
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+
+    try {
+        // 获取表单数据
+        const name = document.getElementById('mappingName').value.trim();
+        const urlPattern = document.getElementById('mappingUrlPattern').value.trim();
+        const targetHost = document.getElementById('mappingTargetHost').value.trim();
+        const targetPort = parseInt(document.getElementById('mappingTargetPort').value);
+
+        // 获取选中的HTTP方法
+        const methods = [];
+        const methodCheckboxes = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
+        methodCheckboxes.forEach(method => {
+            const checkbox = document.getElementById('method' + method);
+            if (checkbox && checkbox.checked) {
+                methods.push(method);
+            }
+        });
+
+        if (methods.length === 0) {
+            showToast('请至少选择一种HTTP方法', 'warning');
+            return;
+        }
+
+        const mappingData = {
+            name,
+            url_pattern: urlPattern,
+            target_host: targetHost,
+            target_port: targetPort,
+            methods
+        };
+
+        let response;
+        if (currentEditingMappingId) {
+            // 更新请求映射
+            response = await fetch(`/api/request-mappings/${currentEditingMappingId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(mappingData)
+            });
+        } else {
+            // 创建请求映射
+            response = await fetch('/api/request-mappings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(mappingData)
+            });
+        }
+
+        if (response.ok) {
+            showToast(currentEditingMappingId ? '请求映射更新成功' : '请求映射创建成功', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('mappingModal')).hide();
+            await loadMappings();
+        } else {
+            const error = await response.json();
+            throw new Error(error.detail || '保存失败');
+        }
+    } catch (error) {
+        console.error('保存请求映射失败:', error);
+        showToast('保存请求映射失败: ' + error.message, 'error');
+    }
+}
+
+// 切换请求映射状态
+async function toggleMapping(mappingId) {
+    try {
+        const response = await fetch(`/api/request-mappings/${mappingId}/toggle`, { method: 'POST' });
+
+        if (response.ok) {
+            const mapping = mappings.find(m => m.id === mappingId);
+            const newStatus = mapping ? !mapping.enabled : true;
+            showToast(`请求映射已${newStatus ? '启用' : '禁用'}`, 'success');
+            await loadMappings();
+        } else {
+            const error = await response.json();
+            throw new Error(error.detail || '操作失败');
+        }
+    } catch (error) {
+        console.error('切换请求映射状态失败:', error);
+        showToast('操作失败: ' + error.message, 'error');
+    }
+}
+
+// 删除请求映射
+async function deleteMapping(mappingId) {
+    const mapping = mappings.find(m => m.id === mappingId);
+    if (!mapping) return;
+
+    if (!confirm(`确定要删除请求映射 "${mapping.name}" 吗？`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/request-mappings/${mappingId}`, { method: 'DELETE' });
+
+        if (response.ok) {
+            showToast('请求映射删除成功', 'success');
+            await loadMappings();
+        } else {
+            const error = await response.json();
+            throw new Error(error.detail || '删除失败');
+        }
+    } catch (error) {
+        console.error('删除请求映射失败:', error);
+        showToast('删除请求映射失败: ' + error.message, 'error');
+    }
+}
+
+// 过滤请求映射
+function filterMappings() {
+    const searchTerm = document.getElementById('mappingSearchInput').value.toLowerCase();
+    const statusFilter = document.getElementById('mappingStatusFilter').value;
+
+    const rows = document.querySelectorAll('.mapping-row');
+
+    rows.forEach(row => {
+        const mappingId = row.dataset.id;
+        const mapping = mappings.find(m => m.id === mappingId);
+
+        if (!mapping) {
+            row.style.display = 'none';
+            return;
+        }
+
+        let show = true;
+
+        // 搜索过滤
+        if (searchTerm) {
+            const searchText = `${mapping.name} ${mapping.url_pattern}`.toLowerCase();
+            show = show && searchText.includes(searchTerm);
+        }
+
+        // 状态过滤
+        if (statusFilter) {
+            const isEnabled = statusFilter === 'enabled';
+            show = show && mapping.enabled === isEnabled;
         }
 
         row.style.display = show ? '' : 'none';

@@ -7,7 +7,8 @@ import os
 from models import (
     APIConfig, APICreateRequest, APIUpdateRequest,
     ProxyStatus, HTTPMethod, FileDownloadConfig, 
-    FileDownloadCreateRequest, FileDownloadUpdateRequest
+    FileDownloadCreateRequest, FileDownloadUpdateRequest,
+    RequestMappingConfig, RequestMappingCreateRequest, RequestMappingUpdateRequest
 )
 from services.mitmproxy_service import MitmProxyService
 from services.config_service import ConfigService
@@ -117,8 +118,10 @@ async def toggle_api_status(api_id: str):
 
 
 @router.post("/apis/batch-toggle")
-async def batch_toggle_apis(api_ids: List[str], enabled: bool):
+async def batch_toggle_apis(request: dict):
     """批量切换API状态"""
+    api_ids = request.get("api_ids", [])
+    enabled = request.get("enabled", True)
     success = config_service.batch_toggle_apis(api_ids, enabled)
     if success:
         return {"message": "批量操作成功", "success": True}
@@ -241,3 +244,76 @@ async def toggle_file_download_status(download_id: str):
         return {"message": "文件下载状态切换成功", "success": True}
     else:
         raise HTTPException(status_code=404, detail="文件下载配置不存在")
+
+
+# 请求映射管理相关API
+@router.get("/request-mappings", response_model=List[RequestMappingConfig])
+async def get_all_request_mappings():
+    """获取所有请求映射配置"""
+    return config_service.get_all_request_mappings()
+
+
+@router.get("/request-mappings/{mapping_id}", response_model=RequestMappingConfig)
+async def get_request_mapping(mapping_id: str):
+    """获取指定请求映射配置"""
+    mapping = config_service.get_request_mapping_by_id(mapping_id)
+    if not mapping:
+        raise HTTPException(status_code=404, detail="请求映射配置不存在")
+    return mapping
+
+
+@router.post("/request-mappings", response_model=RequestMappingConfig)
+async def create_request_mapping(mapping_request: RequestMappingCreateRequest):
+    """创建新的请求映射配置"""
+    mapping = RequestMappingConfig(
+        name=mapping_request.name,
+        url_pattern=mapping_request.url_pattern,
+        target_host=mapping_request.target_host,
+        target_port=mapping_request.target_port,
+        methods=mapping_request.methods
+    )
+
+    success = config_service.add_request_mapping(mapping)
+    if success:
+        return mapping
+    else:
+        raise HTTPException(status_code=500, detail="创建请求映射配置失败")
+
+
+@router.put("/request-mappings/{mapping_id}", response_model=RequestMappingConfig)
+async def update_request_mapping(mapping_id: str, mapping_request: RequestMappingUpdateRequest):
+    """更新请求映射配置"""
+    existing_mapping = config_service.get_request_mapping_by_id(mapping_id)
+    if not existing_mapping:
+        raise HTTPException(status_code=404, detail="请求映射配置不存在")
+
+    # 更新字段
+    update_data = mapping_request.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(existing_mapping, field, value)
+
+    success = config_service.update_request_mapping(mapping_id, existing_mapping)
+    if success:
+        return existing_mapping
+    else:
+        raise HTTPException(status_code=500, detail="更新请求映射配置失败")
+
+
+@router.delete("/request-mappings/{mapping_id}")
+async def delete_request_mapping(mapping_id: str):
+    """删除请求映射配置"""
+    success = config_service.delete_request_mapping(mapping_id)
+    if success:
+        return {"message": "请求映射配置删除成功", "success": True}
+    else:
+        raise HTTPException(status_code=404, detail="请求映射配置不存在")
+
+
+@router.post("/request-mappings/{mapping_id}/toggle")
+async def toggle_request_mapping_status(mapping_id: str):
+    """切换请求映射启用状态"""
+    success = config_service.toggle_request_mapping_status(mapping_id)
+    if success:
+        return {"message": "请求映射状态切换成功", "success": True}
+    else:
+        raise HTTPException(status_code=404, detail="请求映射配置不存在")

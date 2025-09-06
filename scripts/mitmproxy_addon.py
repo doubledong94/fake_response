@@ -3,6 +3,7 @@ import os
 import sys
 import mimetypes
 import re
+import requests
 from mitmproxy import http
 from typing import Dict, Any
 from urllib.parse import urlparse
@@ -19,10 +20,11 @@ class MockAddon:
         self.config_file = "data/config.json"
         self.apis = {}
         self.file_downloads = {}
+        self.request_mappings = []
         self.load_config()
 
     def load_config(self):
-        """加载API配置和文件下载配置"""
+        """加载API配置、文件下载配置和请求映射配置"""
         try:
             if os.path.exists(self.config_file):
                 with open(self.config_file, 'r', encoding='utf-8') as f:
@@ -41,6 +43,12 @@ class MockAddon:
                     for download in data.get('file_downloads', []):
                         if download.get('enabled', True):
                             self.file_downloads[download['url_pattern']] = download
+                    
+                    # 加载请求映射配置
+                    self.request_mappings = []
+                    for mapping in data.get('request_mappings', []):
+                        if mapping.get('enabled', True):
+                            self.request_mappings.append(mapping)
         except Exception as e:
             print(f"加载配置失败: {e}")
 
@@ -154,6 +162,111 @@ class MockAddon:
             print(f"提供本地文件服务时出错: {e}")
             return False
 
+    def handle_request_mapping(self, flow: http.HTTPFlow, mapping_config: dict) -> bool:
+        """处理请求映射转发"""
+        try:
+            target_host = mapping_config.get('target_host', 'localhost')
+            target_port = mapping_config.get('target_port')
+            
+            if not target_port:
+                print(f"请求映射配置错误: 缺少target_port")
+                return False
+            
+            # 构建目标URL
+            original_url = flow.request.url
+            parsed_url = urlparse(original_url)
+            
+            # 替换主机和端口
+            target_url = f"http://{target_host}:{target_port}{parsed_url.path}"
+            if parsed_url.query:
+                target_url += f"?{parsed_url.query}"
+            
+            # 准备请求数据
+            headers = dict(flow.request.headers)
+            # 移除可能冲突的头部
+            headers.pop('Host', None)
+            headers['Host'] = f"{target_host}:{target_port}"
+            
+            method = flow.request.method.upper()
+            
+            # 发送请求到目标服务器
+            response = None
+            if method == 'GET':
+                response = requests.get(target_url, headers=headers, timeout=30)
+            elif method == 'POST':
+                response = requests.post(
+                    target_url, 
+                    data=flow.request.content, 
+                    headers=headers,
+                    timeout=30
+                )
+            elif method == 'PUT':
+                response = requests.put(
+                    target_url, 
+                    data=flow.request.content, 
+                    headers=headers,
+                    timeout=30
+                )
+            elif method == 'DELETE':
+                response = requests.delete(target_url, headers=headers, timeout=30)
+            elif method == 'PATCH':
+                response = requests.patch(
+                    target_url, 
+                    data=flow.request.content, 
+                    headers=headers,
+                    timeout=30
+                )
+            else:
+                # 对于其他方法，使用requests的通用方法
+                response = requests.request(
+                    method,
+                    target_url,
+                    data=flow.request.content,
+                    headers=headers,
+                    timeout=30
+                )
+            
+            if response:
+                # 准备响应头
+                response_headers = dict(response.headers)
+                # 移除可能导致问题的头部
+                response_headers.pop('Transfer-Encoding', None)
+                response_headers.pop('Connection', None)
+                
+                # 创建响应
+                flow.response = http.Response.make(
+                    status_code=response.status_code,
+                    content=response.content,
+                    headers=response_headers
+                )
+                
+                print(f"请求映射转发: {original_url} -> {target_url} (状态码: {response.status_code})")
+                return True
+            
+        except requests.exceptions.ConnectionError:
+            print(f"请求映射转发失败: 无法连接到 {target_host}:{target_port}")
+            # 创建连接错误响应
+            flow.response = http.Response.make(
+                status_code=502,
+                content=b'{"error": "Target server unavailable"}',
+                headers={"Content-Type": "application/json; charset=utf-8"}
+            )
+            return True
+        except requests.exceptions.Timeout:
+            print(f"请求映射转发超时: {target_host}:{target_port}")
+            # 创建超时响应
+            flow.response = http.Response.make(
+                status_code=504,
+                content=b'{"error": "Target server timeout"}',
+                headers={"Content-Type": "application/json; charset=utf-8"}
+            )
+            return True
+        except Exception as e:
+            print(f"请求映射转发时出错: {e}")
+            return False
+        
+        return False
+
     def request(self, flow: http.HTTPFlow) -> None:
         """处理HTTP请求"""
         # 重新加载配置以支持热更新
@@ -165,14 +278,26 @@ class MockAddon:
         netloc = parsed_url.netloc
         path = parsed_url.path
 
-        # 首先检查文件下载拦截
+        # 首先检查请求映射（优先级最高）
+        for mapping_config in self.request_mappings:
+            url_pattern = mapping_config.get('url_pattern', '')
+            methods = mapping_config.get('methods', [])
+            
+            # 检查URL模式和HTTP方法是否匹配
+            if (self.match_url_pattern(request_url, url_pattern) and 
+                method.upper() in [m.upper() for m in methods]):
+                if self.handle_request_mapping(flow, mapping_config):
+                    return  # 成功转发请求
+                # 如果转发失败，继续处理其他配置
+
+        # 然后检查文件下载拦截
         for pattern, download_config in self.file_downloads.items():
             if self.match_url_pattern(request_url, pattern):
                 if self.serve_local_file(flow, download_config):
                     return  # 成功拦截并提供了本地文件
                 # 如果文件不存在或其他错误，继续处理其他配置
 
-        # 查找匹配的API配置
+        # 最后查找匹配的API配置
         key = f"{method}:{netloc}{path}"
         if key in self.apis:
             response_config = self.apis[key]

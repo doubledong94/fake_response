@@ -80,6 +80,11 @@
                             <i class="bi bi-download"></i> 文件下载拦截
                         </button>
                     </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="mapping-tab" data-bs-toggle="tab" data-bs-target="#mapping-pane" type="button" role="tab">
+                            <i class="bi bi-arrow-left-right"></i> 请求映射管理
+                        </button>
+                    </li>
                 </ul>
             </div>
         </div>
@@ -222,6 +227,68 @@
                                     <i class="bi bi-folder-x display-1 text-muted"></i>
                                     <h5 class="text-muted mt-3">暂无文件下载拦截配置</h5>
                                     <p class="text-muted">点击"添加拦截规则"按钮创建第一个下载拦截配置</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 请求映射管理标签页 -->
+            <div class="tab-pane fade" id="mapping-pane" role="tabpanel">
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="card-title mb-0">
+                                    <i class="bi bi-arrow-left-right"></i>
+                                    请求映射管理
+                                </h5>
+                                <div>
+                                    <button class="btn btn-primary me-2" onclick="showAddMappingModal()">
+                                        <i class="bi bi-plus-lg"></i> 添加映射规则
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <!-- 搜索过滤 -->
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <input type="text" class="form-control" id="mappingSearchInput" placeholder="搜索规则名称或URL模式..." onkeyup="filterMappings()">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <select class="form-select" id="mappingStatusFilter" onchange="filterMappings()">
+                                            <option value="">所有状态</option>
+                                            <option value="enabled">已启用</option>
+                                            <option value="disabled">已禁用</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- 请求映射列表 -->
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>名称</th>
+                                                <th>URL模式</th>
+                                                <th>目标地址</th>
+                                                <th>支持方法</th>
+                                                <th>状态</th>
+                                                <th width="150">操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="mappingTableBody">
+                                            <!-- 请求映射列表将通过JavaScript动态生成 -->
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <!-- 空状态 -->
+                                <div id="mappingEmptyState" class="text-center py-5" style="display: none;">
+                                    <i class="bi bi-arrow-left-right display-1 text-muted"></i>
+                                    <h5 class="text-muted mt-3">暂无请求映射配置</h5>
+                                    <p class="text-muted">点击"添加映射规则"按钮创建第一个请求映射配置</p>
                                 </div>
                             </div>
                         </div>
@@ -384,6 +451,116 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
                     <button type="button" class="btn btn-primary" onclick="saveDownload()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加/编辑请求映射模态框 -->
+    <div class="modal fade" id="mappingModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="mappingModalTitle">添加请求映射</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="mappingForm">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="mappingName" class="form-label">规则名称 *</label>
+                                    <input type="text" class="form-control" id="mappingName" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="mappingTargetHost" class="form-label">目标主机</label>
+                                    <input type="text" class="form-control" id="mappingTargetHost" value="localhost" placeholder="localhost">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="mappingUrlPattern" class="form-label">URL匹配模式 *</label>
+                            <input type="text" class="form-control" id="mappingUrlPattern" placeholder="例如: /api/v1/.* 或 https://example.com/.*" required>
+                            <div class="form-text">支持正则表达式。例如：<code>/api/v1/.*</code> 匹配所有 /api/v1/ 开头的请求</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="mappingTargetPort" class="form-label">目标端口 *</label>
+                            <input type="number" class="form-control" id="mappingTargetPort" min="1" max="65535" placeholder="3000" required>
+                            <div class="form-text">请求将被转发到此端口的本地服务</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">支持的HTTP方法 *</label>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="methodGET" value="GET" checked>
+                                        <label class="form-check-label" for="methodGET">GET</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="methodPOST" value="POST" checked>
+                                        <label class="form-check-label" for="methodPOST">POST</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="methodPUT" value="PUT">
+                                        <label class="form-check-label" for="methodPUT">PUT</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="methodDELETE" value="DELETE">
+                                        <label class="form-check-label" for="methodDELETE">DELETE</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="methodPATCH" value="PATCH">
+                                        <label class="form-check-label" for="methodPATCH">PATCH</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="methodHEAD" value="HEAD">
+                                        <label class="form-check-label" for="methodHEAD">HEAD</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="methodOPTIONS" value="OPTIONS">
+                                        <label class="form-check-label" for="methodOPTIONS">OPTIONS</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">常用映射模式示例</h6>
+                                </div>
+                                <div class="card-body">
+                                    <small class="text-muted">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <strong>API路径映射：</strong><br>
+                                                <code>/api/.*</code> - 所有/api/开头的请求<br>
+                                                <code>/api/v1/users/.*</code> - 用户相关API<br>
+                                                <code>.*\.json$</code> - 所有JSON请求<br>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <strong>域名映射：</strong><br>
+                                                <code>api\.example\.com/.*</code> - 特定API域名<br>
+                                                <code>.*\.local/.*</code> - 本地域名<br>
+                                                <code>localhost:8080/.*</code> - 特定端口<br>
+                                            </div>
+                                        </div>
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="saveMapping()">保存</button>
                 </div>
             </div>
         </div>

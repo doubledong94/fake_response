@@ -3,7 +3,7 @@ import os
 import shutil
 from typing import List, Optional
 from datetime import datetime
-from models import APIConfig, APIConfigList, FileDownloadConfig
+from models import APIConfig, APIConfigList, FileDownloadConfig, RequestMappingConfig
 
 
 class ConfigService:
@@ -23,12 +23,14 @@ class ConfigService:
                     data = json.load(f)
                     if "file_downloads" not in data:
                         data["file_downloads"] = []
+                    if "request_mappings" not in data:
+                        data["request_mappings"] = []
                     return data
             else:
-                return {"apis": [], "file_downloads": []}
+                return {"apis": [], "file_downloads": [], "request_mappings": []}
         except Exception as e:
             print(f"加载配置文件失败: {e}")
-            return {"apis": [], "file_downloads": []}
+            return {"apis": [], "file_downloads": [], "request_mappings": []}
 
     def save_config(self, config: dict) -> bool:
         """保存配置文件"""
@@ -144,6 +146,8 @@ class ConfigService:
                 data = json.load(f)
                 if "file_downloads" not in data:
                     data["file_downloads"] = []
+                if "request_mappings" not in data:
+                    data["request_mappings"] = []
                 return self.save_config(data)
         except Exception as e:
             print(f"导入配置失败: {e}")
@@ -190,5 +194,49 @@ class ConfigService:
         for download in config["file_downloads"]:
             if download["id"] == download_id:
                 download["enabled"] = not download["enabled"]
+                return self.save_config(config)
+        return False
+
+    # Request mapping related methods
+    def get_all_request_mappings(self) -> List[RequestMappingConfig]:
+        """获取所有请求映射配置"""
+        config = self.load_config()
+        return [RequestMappingConfig(**rm) for rm in config.get("request_mappings", [])]
+
+    def get_request_mapping_by_id(self, mapping_id: str) -> Optional[RequestMappingConfig]:
+        """根据ID获取请求映射配置"""
+        mappings = self.get_all_request_mappings()
+        for mapping in mappings:
+            if mapping.id == mapping_id:
+                return mapping
+        return None
+
+    def add_request_mapping(self, mapping: RequestMappingConfig) -> bool:
+        """添加请求映射配置"""
+        config = self.load_config()
+        config["request_mappings"].append(mapping.dict())
+        return self.save_config(config)
+
+    def update_request_mapping(self, mapping_id: str, updated_mapping: RequestMappingConfig) -> bool:
+        """更新请求映射配置"""
+        config = self.load_config()
+        for i, mapping in enumerate(config["request_mappings"]):
+            if mapping["id"] == mapping_id:
+                config["request_mappings"][i] = updated_mapping.dict()
+                return self.save_config(config)
+        return False
+
+    def delete_request_mapping(self, mapping_id: str) -> bool:
+        """删除请求映射配置"""
+        config = self.load_config()
+        config["request_mappings"] = [mapping for mapping in config["request_mappings"] if mapping["id"] != mapping_id]
+        return self.save_config(config)
+
+    def toggle_request_mapping_status(self, mapping_id: str) -> bool:
+        """切换请求映射启用状态"""
+        config = self.load_config()
+        for mapping in config["request_mappings"]:
+            if mapping["id"] == mapping_id:
+                mapping["enabled"] = not mapping["enabled"]
                 return self.save_config(config)
         return False
