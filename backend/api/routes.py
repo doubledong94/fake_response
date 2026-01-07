@@ -3,10 +3,12 @@ from fastapi.responses import FileResponse
 from typing import List
 import tempfile
 import os
+import subprocess
+import re
 
 from models import (
     APIConfig, APICreateRequest, APIUpdateRequest,
-    ProxyStatus, HTTPMethod, FileDownloadConfig, 
+    ProxyStatus, HTTPMethod, FileDownloadConfig,
     FileDownloadCreateRequest, FileDownloadUpdateRequest,
     RequestMappingConfig, RequestMappingCreateRequest, RequestMappingUpdateRequest
 )
@@ -317,3 +319,112 @@ async def toggle_request_mapping_status(mapping_id: str):
         return {"message": "请求映射状态切换成功", "success": True}
     else:
         raise HTTPException(status_code=404, detail="请求映射配置不存在")
+
+
+# ADB设备管理相关API
+@router.get("/adb/devices")
+async def get_adb_devices():
+    """获取连接的ADB设备列表"""
+    try:
+        result = subprocess.run(
+            ['adb', 'devices'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+
+        if result.returncode != 0:
+            raise HTTPException(status_code=500, detail="执行adb devices失败")
+
+        # 解析设备列表
+        devices = []
+        lines = result.stdout.strip().split('\n')[1:]  # 跳过第一行 "List of devices attached"
+
+        for line in lines:
+            line = line.strip()
+            if line:
+                # 使用正则表达式分割，支持制表符或多个空格
+                parts = re.split(r'\s+', line, maxsplit=1)
+                if len(parts) == 2:
+                    device_id, status = parts
+                    if status == 'device':  # 只返回正常连接的设备
+                        devices.append({
+                            'id': device_id,
+                            'status': status
+                        })
+
+        return {'devices': devices}
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="ADB命令未找到，请确保已安装Android SDK")
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=500, detail="ADB命令执行超时")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取设备列表失败: {str(e)}")
+
+
+@router.get("/adb/devices/{device_id}/proxy")
+async def get_device_proxy(device_id: str):
+    """获取指定设备的代理设置"""
+    try:
+        result = subprocess.run(
+            ['adb', '-s', device_id, 'shell', 'settings', 'get', 'global', 'http_proxy'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+
+        if result.returncode != 0:
+            raise HTTPException(status_code=500, detail="获取代理设置失败")
+
+        proxy = result.stdout.strip()
+
+        return {
+            'device_id': device_id,
+            'proxy': proxy if proxy and proxy != 'null' else None
+        }
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="ADB命令未找到")
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=500, detail="ADB命令执行超时")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取代理设置失败: {str(e)}")
+
+
+@router.post("/adb/devices/{device_id}/proxy")
+async def set_device_proxy(device_id: str, request: dict):
+    """设置指定设备的代理"""
+    try:
+        proxy = request.get('proxy')
+
+        if proxy:
+            # 设置代理
+            result = subprocess.run(
+                ['adb', '-s', device_id, 'shell', 'settings', 'put', 'global', 'http_proxy', proxy],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+        else:
+            # 清除代理
+            result = subprocess.run(
+                ['adb', '-s', device_id, 'shell', 'settings', 'put', 'global', 'http_proxy', ':0'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+
+        if result.returncode != 0:
+            raise HTTPException(status_code=500, detail="设置代理失败")
+
+        return {
+            'message': '代理设置成功',
+            'success': True,
+            'device_id': device_id,
+            'proxy': proxy
+        }
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="ADB命令未找到")
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=500, detail="ADB命令执行超时")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"设置代理失败: {str(e)}")

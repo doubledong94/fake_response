@@ -6,6 +6,8 @@ let currentEditingId = null;
 let currentEditingDownloadId = null;
 let currentEditingMappingId = null;
 let selectedApiIds = new Set();
+let adbDevices = [];
+let proxyServerAddress = null;
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
@@ -18,15 +20,19 @@ async function initializeApp() {
     await loadAPIs();
     await loadDownloads();
     await loadMappings();
+    await loadAdbDevices();
 
     // 定期检查代理状态
     setInterval(checkProxyStatus, 5000);
+
+    // 定期检查ADB设备
+    setInterval(loadAdbDevices, 1000);
 
     // 标签页切换事件监听
     document.getElementById('download-tab').addEventListener('shown.bs.tab', function() {
         loadDownloads();
     });
-    
+
     document.getElementById('mapping-tab').addEventListener('shown.bs.tab', function() {
         loadMappings();
     });
@@ -58,12 +64,14 @@ function updateStatusUI(status) {
         indicator.className = 'status-indicator status-running';
         statusText.textContent = '代理服务运行中';
         proxyAddress.textContent = `${status.ip}:${status.port}`;
+        proxyServerAddress = `${status.ip}:${status.port}`;
         proxyInfo.style.display = 'block';
         startBtn.disabled = true;
         stopBtn.disabled = false;
     } else {
         indicator.className = 'status-indicator status-stopped';
         statusText.textContent = '代理服务已停止';
+        proxyServerAddress = null;
         proxyInfo.style.display = 'none';
         startBtn.disabled = false;
         stopBtn.disabled = true;
@@ -1066,4 +1074,139 @@ function filterMappings() {
 
         row.style.display = show ? '' : 'none';
     });
+}
+
+// =============================================================================
+// ADB设备管理相关函数
+// =============================================================================
+
+// 加载ADB设备列表
+async function loadAdbDevices() {
+    try {
+        const response = await fetch('/api/adb/devices');
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        adbDevices = data.devices || [];
+        await renderDeviceList();
+    } catch (error) {
+        console.error('获取ADB设备列表失败:', error);
+        // 确保即使失败也显示空状态
+        adbDevices = [];
+        await renderDeviceList();
+    }
+}
+
+// 渲染设备列表
+async function renderDeviceList() {
+    const deviceList = document.getElementById('deviceList');
+    const noDevices = document.getElementById('noDevices');
+
+    if (!deviceList) {
+        return;
+    }
+
+    if (!noDevices) {
+        return;
+    }
+
+    if (adbDevices.length === 0) {
+        noDevices.style.display = 'block';
+        const items = deviceList.querySelectorAll('.list-group-item');
+        items.forEach(item => item.remove());
+        return;
+    }
+
+    noDevices.style.display = 'none';
+
+    // 获取每个设备的代理信息
+    for (const device of adbDevices) {
+        let deviceItem = document.getElementById(`device-${device.id}`);
+
+        if (!deviceItem) {
+            deviceItem = document.createElement('div');
+            deviceItem.id = `device-${device.id}`;
+            deviceItem.className = 'list-group-item';
+            deviceList.appendChild(deviceItem);
+        }
+
+        // 获取设备代理设置
+        try {
+            const proxyResponse = await fetch(`/api/adb/devices/${device.id}/proxy`);
+            const proxyData = await proxyResponse.json();
+
+            const deviceProxy = proxyData.proxy;
+            const isProxySet = deviceProxy && deviceProxy !== ':0';
+            const isMatchingProxy = isProxySet && proxyServerAddress && deviceProxy === proxyServerAddress;
+
+            deviceItem.innerHTML = `
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="mb-1">
+                            <i class="bi bi-phone"></i>
+                            设备: ${device.id}
+                        </h6>
+                        <small class="text-muted">
+                            代理设置: <span class="badge ${isProxySet ? (isMatchingProxy ? 'bg-success' : 'bg-warning') : 'bg-secondary'}">
+                                ${isProxySet ? deviceProxy : '未设置'}
+                            </span>
+                        </small>
+                    </div>
+                    <div>
+                        ${proxyServerAddress ? `
+                            <button class="btn btn-sm ${isMatchingProxy ? 'btn-danger' : 'btn-primary'}"
+                                    onclick="toggleDeviceProxy('${device.id}', ${isMatchingProxy})">
+                                <i class="bi bi-${isMatchingProxy ? 'x-circle' : 'arrow-repeat'}"></i>
+                                ${isMatchingProxy ? '清除代理' : '设置代理'}
+                            </button>
+                        ` : `
+                            <button class="btn btn-sm btn-secondary" disabled>
+                                <i class="bi bi-exclamation-circle"></i>
+                                请先启动代理服务
+                            </button>
+                        `}
+                    </div>
+                </div>
+            `;
+        } catch (error) {
+            console.error(`获取设备 ${device.id} 代理设置失败:`, error);
+        }
+    }
+
+    // 移除不存在的设备
+    const currentDeviceIds = adbDevices.map(d => d.id);
+    const deviceItems = deviceList.querySelectorAll('.list-group-item');
+    deviceItems.forEach(item => {
+        const deviceId = item.id.replace('device-', '');
+        if (!currentDeviceIds.includes(deviceId)) {
+            item.remove();
+        }
+    });
+}
+
+// 切换设备代理
+async function toggleDeviceProxy(deviceId, isCurrentlySet) {
+    try {
+        const proxy = isCurrentlySet ? null : proxyServerAddress;
+
+        const response = await fetch(`/api/adb/devices/${deviceId}/proxy`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ proxy })
+        });
+
+        if (response.ok) {
+            showToast(isCurrentlySet ? '代理已清除' : '代理已设置', 'success');
+            await loadAdbDevices();
+        } else {
+            const error = await response.json();
+            throw new Error(error.detail || '操作失败');
+        }
+    } catch (error) {
+        console.error('设置设备代理失败:', error);
+        showToast('设置设备代理失败: ' + error.message, 'error');
+    }
 }
