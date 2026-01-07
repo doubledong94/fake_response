@@ -29,87 +29,38 @@
     </nav>
 
     <div class="container-fluid mt-3">
-        <!-- 代理状态面板 -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="card-title mb-0">
-                            <i class="bi bi-router"></i>
-                            代理服务状态
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row align-items-center">
-                            <div class="col-md-6">
-                                <div class="d-flex align-items-center">
-                                    <span class="status-indicator me-2" id="statusIndicator"></span>
-                                    <span id="statusText">检查中...</span>
-                                </div>
-                                <div id="proxyInfo" class="mt-2" style="display: none;">
-                                    <small class="text-muted">
-                                        代理地址: <span id="proxyAddress"></span>
-                                    </small>
-                                </div>
-                            </div>
-                            <div class="col-md-6 text-end">
-                                <button class="btn btn-success me-2" id="startBtn" onclick="startProxy()">
-                                    <i class="bi bi-play-fill"></i> 启动代理
-                                </button>
-                                <button class="btn btn-danger" id="stopBtn" onclick="stopProxy()">
-                                    <i class="bi bi-stop-fill"></i> 停止代理
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Android设备管理面板 -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="card-title mb-0">
-                            <i class="bi bi-phone"></i>
-                            Android设备管理
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <div id="deviceList" class="list-group">
-                            <div class="text-center py-3 text-muted" id="noDevices">
-                                <i class="bi bi-phone-slash display-6"></i>
-                                <p class="mt-2 mb-0">未检测到设备，请连接Android设备...</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <!-- 标签页导航 -->
         <div class="row mb-3">
             <div class="col-12">
                 <ul class="nav nav-tabs" id="mainTabs" role="tablist">
                     <li class="nav-item" role="presentation">
-                        <button class="nav-link active" id="api-tab" data-bs-toggle="tab" data-bs-target="#api-pane" type="button" role="tab">
-                            <i class="bi bi-list-ul"></i> API配置管理
+                        <button class="nav-link active" id="captures-tab" data-bs-toggle="tab" data-bs-target="#captures-pane" type="button" role="tab">
+                            <i class="bi bi-radar"></i> 抓包监控
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="proxy-tab" data-bs-toggle="tab" data-bs-target="#proxy-pane" type="button" role="tab">
+                            <i class="bi bi-router"></i> 代理服务
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="device-tab" data-bs-toggle="tab" data-bs-target="#device-pane" type="button" role="tab">
+                            <i class="bi bi-phone"></i> 设备管理
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="api-tab" data-bs-toggle="tab" data-bs-target="#api-pane" type="button" role="tab">
+                            <i class="bi bi-list-ul"></i> API配置
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
                         <button class="nav-link" id="download-tab" data-bs-toggle="tab" data-bs-target="#download-pane" type="button" role="tab">
-                            <i class="bi bi-download"></i> 文件下载拦截
+                            <i class="bi bi-download"></i> 文件下载
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
                         <button class="nav-link" id="mapping-tab" data-bs-toggle="tab" data-bs-target="#mapping-pane" type="button" role="tab">
-                            <i class="bi bi-arrow-left-right"></i> 请求映射管理
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="captures-tab" data-bs-toggle="tab" data-bs-target="#captures-pane" type="button" role="tab">
-                            <i class="bi bi-radar"></i> 抓包监控
+                            <i class="bi bi-arrow-left-right"></i> 请求映射
                         </button>
                     </li>
                 </ul>
@@ -118,8 +69,149 @@
 
         <!-- 标签页内容 -->
         <div class="tab-content" id="mainTabContent">
+            <!-- 抓包监控标签页 -->
+            <div class="tab-pane fade show active" id="captures-pane" role="tabpanel">
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="card-title mb-0">
+                                    <i class="bi bi-radar"></i>
+                                    抓包监控
+                                    <span class="badge bg-primary ms-2" id="captureCount">0</span>
+                                </h5>
+                                <div>
+                                    <span class="badge me-2" id="wsStatus">
+                                        <i class="bi bi-circle-fill"></i> 已断开
+                                    </span>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="clearCaptures()">
+                                        <i class="bi bi-trash"></i> 清空
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <!-- 搜索过滤 -->
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <input type="text" class="form-control" id="captureSearchInput" placeholder="搜索URL、请求或响应内容..." onkeyup="filterCaptures()">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <select class="form-select" id="captureMethodFilter" onchange="filterCaptures()">
+                                            <option value="">所有方法</option>
+                                            <option value="GET">GET</option>
+                                            <option value="POST">POST</option>
+                                            <option value="PUT">PUT</option>
+                                            <option value="DELETE">DELETE</option>
+                                            <option value="PATCH">PATCH</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <select class="form-select" id="captureStatusFilter" onchange="filterCaptures()">
+                                            <option value="">所有状态</option>
+                                            <option value="2xx">2xx 成功</option>
+                                            <option value="3xx">3xx 重定向</option>
+                                            <option value="4xx">4xx 客户端错误</option>
+                                            <option value="5xx">5xx 服务器错误</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- 抓包列表 -->
+                                <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+                                    <table class="table table-hover table-sm">
+                                        <thead style="position: sticky; top: 0; background-color: white; z-index: 10;">
+                                            <tr>
+                                                <th width="60">方法</th>
+                                                <th width="60">状态</th>
+                                                <th>URL</th>
+                                                <th width="80">耗时</th>
+                                                <th width="100">时间</th>
+                                                <th width="120">操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="captureTableBody">
+                                            <!-- 抓包列表将通过JavaScript动态生成 -->
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <!-- 空状态 -->
+                                <div id="captureEmptyState" class="text-center py-5">
+                                    <i class="bi bi-inbox display-1 text-muted"></i>
+                                    <h5 class="text-muted mt-3">暂无抓包数据</h5>
+                                    <p class="text-muted">启动代理后，请求将实时显示在这里</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 代理服务标签页 -->
+            <div class="tab-pane fade" id="proxy-pane" role="tabpanel">
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">
+                                    <i class="bi bi-router"></i>
+                                    代理服务状态
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row align-items-center">
+                                    <div class="col-md-6">
+                                        <div class="d-flex align-items-center">
+                                            <span class="status-indicator me-2" id="statusIndicator"></span>
+                                            <span id="statusText">检查中...</span>
+                                        </div>
+                                        <div id="proxyInfo" class="mt-2" style="display: none;">
+                                            <small class="text-muted">
+                                                代理地址: <span id="proxyAddress"></span>
+                                            </small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 text-end">
+                                        <button class="btn btn-success me-2" id="startBtn" onclick="startProxy()">
+                                            <i class="bi bi-play-fill"></i> 启动代理
+                                        </button>
+                                        <button class="btn btn-danger" id="stopBtn" onclick="stopProxy()">
+                                            <i class="bi bi-stop-fill"></i> 停止代理
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 设备管理标签页 -->
+            <div class="tab-pane fade" id="device-pane" role="tabpanel">
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">
+                                    <i class="bi bi-phone"></i>
+                                    Android设备管理
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="deviceList" class="list-group">
+                                    <div class="text-center py-3 text-muted" id="noDevices">
+                                        <i class="bi bi-phone-slash display-6"></i>
+                                        <p class="mt-2 mb-0">未检测到设备，请连接Android设备...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- API管理标签页 -->
-            <div class="tab-pane fade show active" id="api-pane" role="tabpanel">
+            <div class="tab-pane fade" id="api-pane" role="tabpanel">
                 <div class="row">
                     <div class="col-12">
                         <div class="card">
@@ -316,84 +408,6 @@
                                     <i class="bi bi-arrow-left-right display-1 text-muted"></i>
                                     <h5 class="text-muted mt-3">暂无请求映射配置</h5>
                                     <p class="text-muted">点击"添加映射规则"按钮创建第一个请求映射配置</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 抓包监控标签页 -->
-            <div class="tab-pane fade" id="captures-pane" role="tabpanel">
-                <div class="row">
-                    <div class="col-12">
-                        <div class="card">
-                            <div class="card-header d-flex justify-content-between align-items-center">
-                                <h5 class="card-title mb-0">
-                                    <i class="bi bi-radar"></i>
-                                    抓包监控
-                                    <span class="badge bg-primary ms-2" id="captureCount">0</span>
-                                </h5>
-                                <div>
-                                    <span class="badge me-2" id="wsStatus">
-                                        <i class="bi bi-circle-fill"></i> 已断开
-                                    </span>
-                                    <button class="btn btn-sm btn-outline-danger" onclick="clearCaptures()">
-                                        <i class="bi bi-trash"></i> 清空
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="card-body">
-                                <!-- 搜索过滤 -->
-                                <div class="row mb-3">
-                                    <div class="col-md-6">
-                                        <input type="text" class="form-control" id="captureSearchInput" placeholder="搜索URL、请求或响应内容..." onkeyup="filterCaptures()">
-                                    </div>
-                                    <div class="col-md-3">
-                                        <select class="form-select" id="captureMethodFilter" onchange="filterCaptures()">
-                                            <option value="">所有方法</option>
-                                            <option value="GET">GET</option>
-                                            <option value="POST">POST</option>
-                                            <option value="PUT">PUT</option>
-                                            <option value="DELETE">DELETE</option>
-                                            <option value="PATCH">PATCH</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <select class="form-select" id="captureStatusFilter" onchange="filterCaptures()">
-                                            <option value="">所有状态</option>
-                                            <option value="2xx">2xx 成功</option>
-                                            <option value="3xx">3xx 重定向</option>
-                                            <option value="4xx">4xx 客户端错误</option>
-                                            <option value="5xx">5xx 服务器错误</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <!-- 抓包列表 -->
-                                <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
-                                    <table class="table table-hover table-sm">
-                                        <thead style="position: sticky; top: 0; background-color: white; z-index: 10;">
-                                            <tr>
-                                                <th width="60">方法</th>
-                                                <th width="60">状态</th>
-                                                <th>URL</th>
-                                                <th width="80">耗时</th>
-                                                <th width="100">时间</th>
-                                                <th width="120">操作</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="captureTableBody">
-                                            <!-- 抓包列表将通过JavaScript动态生成 -->
-                                        </tbody>
-                                    </table>
-                                </div>
-
-                                <!-- 空状态 -->
-                                <div id="captureEmptyState" class="text-center py-5">
-                                    <i class="bi bi-inbox display-1 text-muted"></i>
-                                    <h5 class="text-muted mt-3">暂无抓包数据</h5>
-                                    <p class="text-muted">启动代理后，请求将实时显示在这里</p>
                                 </div>
                             </div>
                         </div>
