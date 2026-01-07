@@ -34,18 +34,13 @@
             <div class="col-12">
                 <ul class="nav nav-tabs" id="mainTabs" role="tablist">
                     <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="proxy-device-tab" data-bs-toggle="tab" data-bs-target="#proxy-device-pane" type="button" role="tab">
+                            <i class="bi bi-gear"></i> 代理与设备
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
                         <button class="nav-link active" id="captures-tab" data-bs-toggle="tab" data-bs-target="#captures-pane" type="button" role="tab">
                             <i class="bi bi-radar"></i> 抓包监控
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="proxy-tab" data-bs-toggle="tab" data-bs-target="#proxy-pane" type="button" role="tab">
-                            <i class="bi bi-router"></i> 代理服务
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="device-tab" data-bs-toggle="tab" data-bs-target="#device-pane" type="button" role="tab">
-                            <i class="bi bi-phone"></i> 设备管理
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
@@ -69,6 +64,68 @@
 
         <!-- 标签页内容 -->
         <div class="tab-content" id="mainTabContent">
+            <!-- 代理与设备标签页 -->
+            <div class="tab-pane fade" id="proxy-device-pane" role="tabpanel">
+                <!-- 代理服务状态 -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">
+                                    <i class="bi bi-router"></i>
+                                    代理服务状态
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row align-items-center">
+                                    <div class="col-md-6">
+                                        <div class="d-flex align-items-center">
+                                            <span class="status-indicator me-2" id="statusIndicator"></span>
+                                            <span id="statusText">检查中...</span>
+                                        </div>
+                                        <div id="proxyInfo" class="mt-2" style="display: none;">
+                                            <small class="text-muted">
+                                                代理地址: <span id="proxyAddress"></span>
+                                            </small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 text-end">
+                                        <button class="btn btn-success me-2" id="startBtn" onclick="startProxy()">
+                                            <i class="bi bi-play-fill"></i> 启动代理
+                                        </button>
+                                        <button class="btn btn-danger" id="stopBtn" onclick="stopProxy()">
+                                            <i class="bi bi-stop-fill"></i> 停止代理
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Android设备管理 -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">
+                                    <i class="bi bi-phone"></i>
+                                    Android设备管理
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="deviceList" class="list-group">
+                                    <div class="text-center py-3 text-muted" id="noDevices">
+                                        <i class="bi bi-phone-slash display-6"></i>
+                                        <p class="mt-2 mb-0">未检测到设备，请连接Android设备...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- 抓包监控标签页 -->
             <div class="tab-pane fade show active" id="captures-pane" role="tabpanel">
                 <div class="row">
@@ -140,69 +197,6 @@
                                     <i class="bi bi-inbox display-1 text-muted"></i>
                                     <h5 class="text-muted mt-3">暂无抓包数据</h5>
                                     <p class="text-muted">启动代理后，请求将实时显示在这里</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 代理服务标签页 -->
-            <div class="tab-pane fade" id="proxy-pane" role="tabpanel">
-                <div class="row">
-                    <div class="col-12">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5 class="card-title mb-0">
-                                    <i class="bi bi-router"></i>
-                                    代理服务状态
-                                </h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="row align-items-center">
-                                    <div class="col-md-6">
-                                        <div class="d-flex align-items-center">
-                                            <span class="status-indicator me-2" id="statusIndicator"></span>
-                                            <span id="statusText">检查中...</span>
-                                        </div>
-                                        <div id="proxyInfo" class="mt-2" style="display: none;">
-                                            <small class="text-muted">
-                                                代理地址: <span id="proxyAddress"></span>
-                                            </small>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6 text-end">
-                                        <button class="btn btn-success me-2" id="startBtn" onclick="startProxy()">
-                                            <i class="bi bi-play-fill"></i> 启动代理
-                                        </button>
-                                        <button class="btn btn-danger" id="stopBtn" onclick="stopProxy()">
-                                            <i class="bi bi-stop-fill"></i> 停止代理
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 设备管理标签页 -->
-            <div class="tab-pane fade" id="device-pane" role="tabpanel">
-                <div class="row">
-                    <div class="col-12">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5 class="card-title mb-0">
-                                    <i class="bi bi-phone"></i>
-                                    Android设备管理
-                                </h5>
-                            </div>
-                            <div class="card-body">
-                                <div id="deviceList" class="list-group">
-                                    <div class="text-center py-3 text-muted" id="noDevices">
-                                        <i class="bi bi-phone-slash display-6"></i>
-                                        <p class="mt-2 mb-0">未检测到设备，请连接Android设备...</p>
-                                    </div>
                                 </div>
                             </div>
                         </div>

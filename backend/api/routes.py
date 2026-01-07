@@ -45,6 +45,36 @@ async def stop_proxy():
     """停止代理"""
     success = mitmproxy_service.stop()
     if success:
+        # 自动清除所有已连接设备的代理设置
+        try:
+            result = subprocess.run(
+                ['adb', 'devices'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+
+            if result.returncode == 0:
+                # 解析设备列表
+                lines = result.stdout.strip().split('\n')[1:]  # 跳过第一行
+                for line in lines:
+                    line = line.strip()
+                    if line:
+                        parts = re.split(r'\s+', line, maxsplit=1)
+                        if len(parts) == 2:
+                            device_id, status = parts
+                            if status == 'device':  # 只处理正常连接的设备
+                                # 清除设备代理
+                                subprocess.run(
+                                    ['adb', '-s', device_id, 'shell', 'settings', 'put', 'global', 'http_proxy', ':0'],
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=5
+                                )
+        except Exception as e:
+            print(f"清除设备代理时出错: {e}")
+            # 即使清除代理失败，也不影响停止代理服务的成功状态
+
         return {"message": "代理停止成功", "success": True}
     else:
         raise HTTPException(status_code=500, detail="代理停止失败")
