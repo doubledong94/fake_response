@@ -22,6 +22,9 @@ async function initializeApp() {
     await loadMappings();
     await loadAdbDevices();
 
+    // 初始化抓包功能（启动WebSocket）
+    connectWebSocket();
+
     // 定期检查代理状态
     setInterval(checkProxyStatus, 5000);
 
@@ -35,6 +38,24 @@ async function initializeApp() {
 
     document.getElementById('mapping-tab').addEventListener('shown.bs.tab', function() {
         loadMappings();
+    });
+
+    // 抓包监控标签页切换事件
+    document.getElementById('captures-tab').addEventListener('shown.bs.tab', function() {
+        // 只在第一次切换时加载历史数据
+        if (allCaptures.length === 0) {
+            loadCaptures();
+        } else {
+            // 否则只重新渲染（以更新API配置状态）
+            renderCaptureTable();
+        }
+    });
+
+    // API管理标签页切换时也刷新抓包列表（更新标志状态）
+    document.getElementById('api-tab').addEventListener('shown.bs.tab', function() {
+        if (allCaptures.length > 0) {
+            renderCaptureTable();
+        }
     });
 }
 
@@ -1208,5 +1229,336 @@ async function toggleDeviceProxy(deviceId, isCurrentlySet) {
     } catch (error) {
         console.error('设置设备代理失败:', error);
         showToast('设置设备代理失败: ' + error.message, 'error');
+    }
+}
+// =============================================================================
+// 抓包监控相关函数
+// =============================================================================
+
+let captures = [];
+let allCaptures = [];  // 存储所有抓包数据用于过滤
+let websocket = null;
+
+// 连接WebSocket
+function connectWebSocket() {
+    if (websocket && websocket.readyState === WebSocket.OPEN) {
+        return; // 已经连接
+    }
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/captures`;
+
+    websocket = new WebSocket(wsUrl);
+
+    websocket.onopen = function() {
+        console.log('WebSocket连接已建立');
+        updateWebSocketStatus(true);
+    };
+
+    websocket.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        if (data.type === 'new_capture') {
+            addCaptureToList(data.data);
+        }
+    };
+
+    websocket.onclose = function() {
+        console.log('WebSocket连接已关闭');
+        updateWebSocketStatus(false);
+        // 5秒后尝试重连
+        setTimeout(connectWebSocket, 5000);
+    };
+
+    websocket.onerror = function(error) {
+        console.error('WebSocket错误:', error);
+        updateWebSocketStatus(false);
+    };
+}
+
+// 更新WebSocket状态
+function updateWebSocketStatus(connected) {
+    const wsStatus = document.getElementById('wsStatus');
+    if (wsStatus) {
+        if (connected) {
+            wsStatus.innerHTML = '<i class="bi bi-circle-fill text-success"></i> 已连接';
+            wsStatus.className = 'badge bg-success me-2';
+        } else {
+            wsStatus.innerHTML = '<i class="bi bi-circle-fill text-danger"></i> 已断开';
+            wsStatus.className = 'badge bg-danger me-2';
+        }
+    }
+}
+
+// 加载抓包列表
+async function loadCaptures() {
+    try {
+        const response = await fetch('/api/captures?limit=100');
+        allCaptures = await response.json();
+        captures = [...allCaptures];
+        renderCaptureTable();
+    } catch (error) {
+        console.error('加载抓包列表失败:', error);
+        showToast('加载抓包列表失败', 'error');
+    }
+}
+
+// 添加新抓包到列表 (实时)
+function addCaptureToList(capture) {
+    allCaptures.unshift(capture);  // 添加到开头
+    if (allCaptures.length > 1000) {
+        allCaptures = allCaptures.slice(0, 1000);  // 限制最大数量
+    }
+    filterCaptures();  // 应用当前过滤条件
+}
+
+// 渲染抓包表格
+function renderCaptureTable() {
+    const tbody = document.getElementById('captureTableBody');
+    const emptyState = document.getElementById('captureEmptyState');
+    const countBadge = document.getElementById('captureCount');
+
+    countBadge.textContent = captures.length;
+
+    if (captures.length === 0) {
+        tbody.innerHTML = '';
+        emptyState.style.display = 'block';
+        return;
+    }
+
+    emptyState.style.display = 'none';
+
+    tbody.innerHTML = captures.map(capture => {
+        const statusClass = getStatusClass(capture.response?.status_code);
+        const methodClass = getMethodClass(capture.request.method);
+        const duration = capture.response?.duration || '-';
+        const time = new Date(capture.timestamp * 1000).toLocaleTimeString();
+
+        // 检查是否已配置API
+        const url = new URL(capture.request.url);
+        const apiUrl = url.host + url.pathname;
+        const isConfigured = apis.some(api =>
+            api.url === apiUrl &&
+            api.method === capture.request.method &&
+            api.enabled
+        );
+
+        return `
+            <tr onclick="showCaptureDetail('${capture.id}')" style="cursor: pointer;" class="${isConfigured ? 'table-success' : ''}">
+                <td>
+                    <span class="badge bg-${methodClass}">${capture.request.method}</span>
+                    ${isConfigured ? '<i class="bi bi-check-circle-fill text-success ms-1" title="已配置API"></i>' : ''}
+                </td>
+                <td><span class="badge bg-${statusClass}">${capture.response?.status_code || '-'}</span></td>
+                <td class="text-truncate" style="max-width: 400px;" title="${capture.request.url}">
+                    ${capture.request.url}
+                </td>
+                <td>${duration}ms</td>
+                <td><small>${time}</small></td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); showCaptureDetail('${capture.id}')" title="查看详情">
+                        <i class="bi bi-eye"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-${isConfigured ? 'warning' : 'success'}" onclick="event.stopPropagation(); addCaptureToAPI('${capture.id}')" title="${isConfigured ? '更新API配置' : '添加到API配置'}">
+                        <i class="bi bi-${isConfigured ? 'arrow-repeat' : 'plus-circle'}"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// 获取状态码样式类
+function getStatusClass(statusCode) {
+    if (!statusCode) return 'secondary';
+    if (statusCode >= 200 && statusCode < 300) return 'success';
+    if (statusCode >= 300 && statusCode < 400) return 'info';
+    if (statusCode >= 400 && statusCode < 500) return 'warning';
+    if (statusCode >= 500) return 'danger';
+    return 'secondary';
+}
+
+// 获取方法样式类
+function getMethodClass(method) {
+    const methodColors = {
+        'GET': 'primary',
+        'POST': 'success',
+        'PUT': 'warning',
+        'DELETE': 'danger',
+        'PATCH': 'info'
+    };
+    return methodColors[method] || 'secondary';
+}
+
+// 显示抓包详情
+function showCaptureDetail(captureId) {
+    const capture = allCaptures.find(c => c.id === captureId);
+    if (!capture) return;
+
+    // 填充请求信息
+    document.getElementById('detailRequestUrl').textContent = capture.request.url;
+    document.getElementById('detailRequestHeaders').textContent = 
+        JSON.stringify(capture.request.headers, null, 2);
+    document.getElementById('detailRequestBody').textContent = 
+        capture.request.request_body || '(无请求体)';
+
+    // 填充响应信息
+    if (capture.response) {
+        document.getElementById('detailResponseStatus').innerHTML = 
+            `<span class="badge bg-${getStatusClass(capture.response.status_code)}">${capture.response.status_code}</span>`;
+        document.getElementById('detailResponseHeaders').textContent = 
+            JSON.stringify(capture.response.headers, null, 2);
+        
+        // 尝试格式化JSON响应
+        let responseBody = capture.response.response_body || '(无响应体)';
+        try {
+            const json = JSON.parse(responseBody);
+            responseBody = JSON.stringify(json, null, 2);
+        } catch (e) {
+            // 不是JSON，保持原样
+        }
+        document.getElementById('detailResponseBody').textContent = responseBody;
+    } else {
+        document.getElementById('detailResponseStatus').textContent = '(无响应)';
+        document.getElementById('detailResponseHeaders').textContent = '';
+        document.getElementById('detailResponseBody').textContent = '';
+    }
+
+    new bootstrap.Modal(document.getElementById('captureDetailModal')).show();
+}
+
+// 过滤抓包数据
+function filterCaptures() {
+    const searchTerm = document.getElementById('captureSearchInput')?.value.toLowerCase() || '';
+    const methodFilter = document.getElementById('captureMethodFilter')?.value || '';
+    const statusFilter = document.getElementById('captureStatusFilter')?.value || '';
+
+    captures = allCaptures.filter(capture => {
+        let show = true;
+
+        // 搜索过滤 (URL、请求体、响应体)
+        if (searchTerm) {
+            const searchText = `
+                ${capture.request.url}
+                ${capture.request.request_body}
+                ${capture.response?.response_body || ''}
+            `.toLowerCase();
+            show = show && searchText.includes(searchTerm);
+        }
+
+        // 方法过滤
+        if (methodFilter) {
+            show = show && capture.request.method === methodFilter;
+        }
+
+        // 状态码过滤
+        if (statusFilter && capture.response) {
+            const status = capture.response.status_code;
+            if (statusFilter === '2xx') show = show && status >= 200 && status < 300;
+            else if (statusFilter === '3xx') show = show && status >= 300 && status < 400;
+            else if (statusFilter === '4xx') show = show && status >= 400 && status < 500;
+            else if (statusFilter === '5xx') show = show && status >= 500;
+        }
+
+        return show;
+    });
+
+    renderCaptureTable();
+}
+
+// 清空抓包数据
+async function clearCaptures() {
+    if (!confirm('确定要清空所有抓包数据吗？')) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/captures', { method: 'DELETE' });
+        if (response.ok) {
+            allCaptures = [];
+            captures = [];
+            renderCaptureTable();
+            showToast('抓包数据已清空', 'success');
+        } else {
+            throw new Error('清空失败');
+        }
+    } catch (error) {
+        console.error('清空抓包数据失败:', error);
+        showToast('清空抓包数据失败: ' + error.message, 'error');
+    }
+}
+
+// 将抓包记录添加到API配置
+async function addCaptureToAPI(captureId) {
+    const capture = allCaptures.find(c => c.id === captureId);
+    if (!capture) {
+        showToast('未找到抓包记录', 'error');
+        return;
+    }
+
+    if (!capture.response) {
+        showToast('该请求没有响应数据，无法添加', 'warning');
+        return;
+    }
+
+    try {
+        // 解析URL
+        const url = new URL(capture.request.url);
+        // API配置的URL格式：host + pathname（不包括协议和查询参数）
+        const apiUrl = url.host + url.pathname;
+
+        // 解析响应体
+        let responseBody = {};
+        try {
+            if (capture.response.response_body) {
+                responseBody = JSON.parse(capture.response.response_body);
+            }
+        } catch (e) {
+            // 如果不是JSON，作为文本处理
+            responseBody = { data: capture.response.response_body };
+        }
+
+        // 构建API配置数据
+        const apiData = {
+            name: `${capture.request.method} ${url.host}${url.pathname}`,
+            url: apiUrl,
+            method: capture.request.method,
+            response: {
+                status: capture.response.status_code,
+                headers: capture.response.headers,
+                body: responseBody
+            }
+        };
+
+        // 发送请求创建API配置
+        const response = await fetch('/api/apis', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(apiData)
+        });
+
+        if (response.ok) {
+            showToast('API配置添加成功', 'success');
+            // 重新加载API列表
+            await loadAPIs();
+
+            // 刷新抓包列表以更新标志状态
+            renderCaptureTable();
+
+            // 提示用户切换到API管理标签页
+            if (confirm('API配置已添加成功，是否切换到API配置管理页面查看？')) {
+                // 切换到API管理标签页
+                const apiTab = document.getElementById('api-tab');
+                if (apiTab) {
+                    const tab = new bootstrap.Tab(apiTab);
+                    tab.show();
+                }
+            }
+        } else {
+            const error = await response.json();
+            throw new Error(error.detail || '添加失败');
+        }
+    } catch (error) {
+        console.error('添加API配置失败:', error);
+        showToast('添加API配置失败: ' + error.message, 'error');
     }
 }

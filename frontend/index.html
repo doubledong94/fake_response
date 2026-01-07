@@ -107,6 +107,11 @@
                             <i class="bi bi-arrow-left-right"></i> 请求映射管理
                         </button>
                     </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="captures-tab" data-bs-toggle="tab" data-bs-target="#captures-pane" type="button" role="tab">
+                            <i class="bi bi-radar"></i> 抓包监控
+                        </button>
+                    </li>
                 </ul>
             </div>
         </div>
@@ -312,6 +317,138 @@
                                     <h5 class="text-muted mt-3">暂无请求映射配置</h5>
                                     <p class="text-muted">点击"添加映射规则"按钮创建第一个请求映射配置</p>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 抓包监控标签页 -->
+            <div class="tab-pane fade" id="captures-pane" role="tabpanel">
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="card-title mb-0">
+                                    <i class="bi bi-radar"></i>
+                                    抓包监控
+                                    <span class="badge bg-primary ms-2" id="captureCount">0</span>
+                                </h5>
+                                <div>
+                                    <span class="badge me-2" id="wsStatus">
+                                        <i class="bi bi-circle-fill"></i> 已断开
+                                    </span>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="clearCaptures()">
+                                        <i class="bi bi-trash"></i> 清空
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <!-- 搜索过滤 -->
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <input type="text" class="form-control" id="captureSearchInput" placeholder="搜索URL、请求或响应内容..." onkeyup="filterCaptures()">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <select class="form-select" id="captureMethodFilter" onchange="filterCaptures()">
+                                            <option value="">所有方法</option>
+                                            <option value="GET">GET</option>
+                                            <option value="POST">POST</option>
+                                            <option value="PUT">PUT</option>
+                                            <option value="DELETE">DELETE</option>
+                                            <option value="PATCH">PATCH</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <select class="form-select" id="captureStatusFilter" onchange="filterCaptures()">
+                                            <option value="">所有状态</option>
+                                            <option value="2xx">2xx 成功</option>
+                                            <option value="3xx">3xx 重定向</option>
+                                            <option value="4xx">4xx 客户端错误</option>
+                                            <option value="5xx">5xx 服务器错误</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- 抓包列表 -->
+                                <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+                                    <table class="table table-hover table-sm">
+                                        <thead style="position: sticky; top: 0; background-color: white; z-index: 10;">
+                                            <tr>
+                                                <th width="60">方法</th>
+                                                <th width="60">状态</th>
+                                                <th>URL</th>
+                                                <th width="80">耗时</th>
+                                                <th width="100">时间</th>
+                                                <th width="120">操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="captureTableBody">
+                                            <!-- 抓包列表将通过JavaScript动态生成 -->
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <!-- 空状态 -->
+                                <div id="captureEmptyState" class="text-center py-5">
+                                    <i class="bi bi-inbox display-1 text-muted"></i>
+                                    <h5 class="text-muted mt-3">暂无抓包数据</h5>
+                                    <p class="text-muted">启动代理后，请求将实时显示在这里</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 抓包详情模态框 -->
+    <div class="modal fade" id="captureDetailModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">抓包详情</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <ul class="nav nav-tabs mb-3" role="tablist">
+                        <li class="nav-item">
+                            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#detail-request">请求</button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#detail-response">响应</button>
+                        </li>
+                    </ul>
+                    <div class="tab-content">
+                        <div class="tab-pane fade show active" id="detail-request">
+                            <h6>请求信息</h6>
+                            <div class="mb-3">
+                                <strong>URL:</strong>
+                                <code id="detailRequestUrl"></code>
+                            </div>
+                            <div class="mb-3">
+                                <strong>请求头:</strong>
+                                <pre id="detailRequestHeaders" class="bg-light p-2" style="max-height: 200px; overflow-y: auto;"></pre>
+                            </div>
+                            <div class="mb-3">
+                                <strong>请求体:</strong>
+                                <pre id="detailRequestBody" class="bg-light p-2" style="max-height: 300px; overflow-y: auto;"></pre>
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="detail-response">
+                            <h6>响应信息</h6>
+                            <div class="mb-3">
+                                <strong>状态码:</strong>
+                                <span id="detailResponseStatus"></span>
+                            </div>
+                            <div class="mb-3">
+                                <strong>响应头:</strong>
+                                <pre id="detailResponseHeaders" class="bg-light p-2" style="max-height: 200px; overflow-y: auto;"></pre>
+                            </div>
+                            <div class="mb-3">
+                                <strong>响应体:</strong>
+                                <pre id="detailResponseBody" class="bg-light p-2" style="max-height: 300px; overflow-y: auto;"></pre>
                             </div>
                         </div>
                     </div>

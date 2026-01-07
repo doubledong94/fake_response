@@ -91,3 +91,31 @@ class RequestMappingUpdateRequest(BaseModel):
     target_port: Optional[int] = Field(None, ge=1, le=65535)
     methods: Optional[List[HTTPMethod]] = None
     enabled: Optional[bool] = None
+
+class CapturedRequest(BaseModel):
+    """抓包请求数据模型"""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    timestamp: float
+    method: str
+    url: str
+    host: str
+    path: str
+    headers: Dict[str, str]
+    query_params: str = ""
+    request_body: str = ""
+    request_size: int = 0
+
+class CapturedResponse(BaseModel):
+    """抓包响应数据模型"""
+    status_code: int
+    headers: Dict[str, str]
+    response_body: str = ""
+    response_size: int = 0
+    duration: float = 0  # 响应时间（毫秒）
+
+class CapturedFlow(BaseModel):
+    """完整的抓包数据流"""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    timestamp: float
+    request: CapturedRequest
+    response: Optional[CapturedResponse] = None

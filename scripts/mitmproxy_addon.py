@@ -4,9 +4,10 @@ import sys
 import mimetypes
 import re
 import requests
+import time
 from mitmproxy import http
 from typing import Dict, Any
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 # 确保标准输出使用UTF-8编码
 if hasattr(sys.stdout, 'reconfigure'):
@@ -18,9 +19,13 @@ elif hasattr(sys.stdout, 'buffer'):
 class MockAddon:
     def __init__(self):
         self.config_file = "data/config.json"
+        self.capture_file = "data/realtime_capture.json"
         self.apis = {}
         self.file_downloads = {}
         self.request_mappings = []
+        self.flow_start_times = {}  # 记录请求开始时间
+        self.request_count = 0  # 统计请求数量
+        self.response_count = 0  # 统计响应数量
         self.load_config()
 
     def load_config(self):
@@ -267,8 +272,87 @@ class MockAddon:
         
         return False
 
+    def save_captured_flow(self, flow: http.HTTPFlow):
+        """保存抓包数据到文件（JSONL格式，每行一个JSON对象）"""
+        try:
+            # 记录请求开始时间
+            flow_id = id(flow)
+            start_time = self.flow_start_times.get(flow_id, time.time())
+
+            parsed_url = urlparse(flow.request.url)
+
+            # 准备请求数据
+            request_headers = dict(flow.request.headers)
+            request_body = ""
+            if flow.request.content:
+                try:
+                    request_body = flow.request.content.decode('utf-8', errors='replace')
+                except:
+                    request_body = f"<binary data, {len(flow.request.content)} bytes>"
+
+            captured_data = {
+                'id': str(flow_id),
+                'timestamp': time.time(),
+                'request': {
+                    'id': str(flow_id),
+                    'timestamp': start_time,
+                    'method': flow.request.method,
+                    'url': flow.request.url,
+                    'host': parsed_url.netloc,
+                    'path': parsed_url.path,
+                    'headers': request_headers,
+                    'query_params': parsed_url.query or "",
+                    'request_body': request_body[:10000],  # 限制大小
+                    'request_size': len(flow.request.content) if flow.request.content else 0
+                }
+            }
+
+            # 如果有响应，添加响应数据
+            if flow.response:
+                response_headers = dict(flow.response.headers)
+                response_body = ""
+                if flow.response.content:
+                    try:
+                        response_body = flow.response.content.decode('utf-8', errors='replace')
+                    except:
+                        response_body = f"<binary data, {len(flow.response.content)} bytes>"
+
+                duration = (time.time() - start_time) * 1000  # 转换为毫秒
+
+                captured_data['response'] = {
+                    'status_code': flow.response.status_code,
+                    'headers': response_headers,
+                    'response_body': response_body[:10000],  # 限制大小
+                    'response_size': len(flow.response.content) if flow.response.content else 0,
+                    'duration': round(duration, 2)
+                }
+
+            # 写入文件（追加模式，JSONL格式）
+            os.makedirs(os.path.dirname(self.capture_file), exist_ok=True)
+            with open(self.capture_file, 'a', encoding='utf-8') as f:
+                json.dump(captured_data, f, ensure_ascii=False)
+                f.write('\n')  # 每个JSON对象一行
+                f.flush()  # 立即刷新到磁盘
+
+            # 清理开始时间记录
+            if flow_id in self.flow_start_times:
+                del self.flow_start_times[flow_id]
+
+        except Exception as e:
+            print(f"保存抓包数据失败: {e}")
+            import traceback
+            traceback.print_exc()
+
     def request(self, flow: http.HTTPFlow) -> None:
         """处理HTTP请求"""
+        # 记录请求开始时间
+        self.flow_start_times[id(flow)] = time.time()
+
+        # 统计请求数量
+        self.request_count += 1
+        if self.request_count % 10 == 0:
+            print(f"已处理请求数: {self.request_count}, 已记录响应数: {self.response_count}")
+
         # 重新加载配置以支持热更新
         self.load_config()
 
@@ -348,6 +432,19 @@ class MockAddon:
                     content=b'{"error": "Mock response encoding error"}',
                     headers={"Content-Type": "application/json; charset=utf-8"}
                 )
+
+    def response(self, flow: http.HTTPFlow) -> None:
+        """处理HTTP响应，记录抓包数据"""
+        try:
+            # 统计响应数量
+            self.response_count += 1
+
+            # 保存完整的请求和响应数据
+            self.save_captured_flow(flow)
+        except Exception as e:
+            print(f"记录响应时出错: {e}")
+            import traceback
+            traceback.print_exc()
 
 
 addons = [MockAddon()]

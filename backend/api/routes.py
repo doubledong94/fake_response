@@ -10,14 +10,17 @@ from models import (
     APIConfig, APICreateRequest, APIUpdateRequest,
     ProxyStatus, HTTPMethod, FileDownloadConfig,
     FileDownloadCreateRequest, FileDownloadUpdateRequest,
-    RequestMappingConfig, RequestMappingCreateRequest, RequestMappingUpdateRequest
+    RequestMappingConfig, RequestMappingCreateRequest, RequestMappingUpdateRequest,
+    CapturedFlow
 )
 from services.mitmproxy_service import MitmProxyService
 from services.config_service import ConfigService
+from services.capture_service import get_capture_service
 
 router = APIRouter()
 mitmproxy_service = MitmProxyService()
 config_service = ConfigService()
+capture_service = get_capture_service()
 
 
 # MitmProxy 控制相关API
@@ -428,3 +431,38 @@ async def set_device_proxy(device_id: str, request: dict):
         raise HTTPException(status_code=500, detail="ADB命令执行超时")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"设置代理失败: {str(e)}")
+
+
+# 抓包数据管理相关API
+@router.get("/captures", response_model=List[CapturedFlow])
+async def get_captures(limit: int = 100, offset: int = 0):
+    """获取抓包数据列表"""
+    return capture_service.get_all_flows(limit=limit, offset=offset)
+
+
+@router.get("/captures/search")
+async def search_captures(q: str, limit: int = 100):
+    """搜索抓包数据"""
+    return capture_service.search_flows(q, limit=limit)
+
+
+@router.get("/captures/{flow_id}", response_model=CapturedFlow)
+async def get_capture(flow_id: str):
+    """获取指定抓包数据详情"""
+    flow = capture_service.get_flow_by_id(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="抓包数据不存在")
+    return flow
+
+
+@router.delete("/captures")
+async def clear_captures():
+    """清空所有抓包数据"""
+    capture_service.clear_flows()
+    return {"message": "抓包数据已清空", "success": True}
+
+
+@router.get("/captures/statistics")
+async def get_capture_statistics():
+    """获取抓包统计信息"""
+    return capture_service.get_statistics()

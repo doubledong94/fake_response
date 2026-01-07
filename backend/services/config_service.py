@@ -88,7 +88,23 @@ class ConfigService:
     def add_api(self, api: APIConfig) -> bool:
         """添加API配置"""
         config = self.load_config()
-        config["apis"].append(api.dict())
+
+        # 检查是否存在相同的URL和方法，如果存在则覆盖并移到最前面
+        found_index = -1
+        for i, existing_api in enumerate(config["apis"]):
+            if existing_api["url"] == api.url and existing_api["method"] == api.method:
+                # 保留原来的ID和enabled状态
+                api.id = existing_api["id"]
+                api.enabled = existing_api.get("enabled", True)
+                found_index = i
+                break
+
+        if found_index >= 0:
+            # 删除原有位置的配置
+            config["apis"].pop(found_index)
+        # 添加到列表最前面
+        config["apis"].insert(0, api.dict())
+
         return self.save_config(config)
 
     def update_api(self, api_id: str, updated_api: APIConfig) -> bool:
