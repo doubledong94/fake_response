@@ -302,7 +302,7 @@ class MockAddon:
                     'path': parsed_url.path,
                     'headers': request_headers,
                     'query_params': parsed_url.query or "",
-                    'request_body': request_body[:10000],  # 限制大小
+                    'request_body': request_body,
                     'request_size': len(flow.request.content) if flow.request.content else 0
                 }
             }
@@ -322,7 +322,7 @@ class MockAddon:
                 captured_data['response'] = {
                     'status_code': flow.response.status_code,
                     'headers': response_headers,
-                    'response_body': response_body[:10000],  # 限制大小
+                    'response_body': response_body,
                     'response_size': len(flow.response.content) if flow.response.content else 0,
                     'duration': round(duration, 2)
                 }
